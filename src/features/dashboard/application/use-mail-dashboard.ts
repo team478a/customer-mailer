@@ -127,6 +127,8 @@ export function useMailDashboard() {
   const [suppressions, setSuppressions] = useState<SuppressionEntry[]>([]);
   const [dataMode, setDataMode] = useState<"local" | "supabase">("local");
   const [serverAvailable, setServerAvailable] = useState(false);
+  const [resendConfigured, setResendConfigured] = useState(false);
+  const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [remoteReady, setRemoteReady] = useState(false);
   const [isDataBusy, setIsDataBusy] = useState(false);
   const [remoteSaveStatus, setRemoteSaveStatus] = useState<
@@ -198,9 +200,13 @@ export function useMailDashboard() {
         const configuration = await fetch("/api/configuration/status").then(
           (response) => response.json() as Promise<{
             supabaseConfigured: boolean;
+            resendConfigured: boolean;
+            webhookConfigured: boolean;
           }>,
         );
         setServerAvailable(configuration.supabaseConfigured);
+        setResendConfigured(configuration.resendConfigured);
+        setWebhookConfigured(configuration.webhookConfigured);
         if (!configuration.supabaseConfigured) return;
         const projectResponse = await fetch("/api/data/projects");
         if (!projectResponse.ok) return;
@@ -970,6 +976,8 @@ export function useMailDashboard() {
     settingsDirty,
     dataMode,
     serverAvailable,
+    resendConfigured,
+    webhookConfigured,
     remoteSaveStatus,
     suppressions,
     preflight,

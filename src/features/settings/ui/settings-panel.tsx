@@ -12,6 +12,8 @@ export function SettingsPanel({
   onSettingsChange,
   secrets,
   settings,
+  resendConfigured,
+  webhookConfigured,
 }: {
   isDirty: boolean;
   onReset: () => void;
@@ -20,6 +22,8 @@ export function SettingsPanel({
   onSettingsChange: (patch: Partial<ProjectSettings>) => void;
   secrets: ProjectSecrets;
   settings: ProjectSettings;
+  resendConfigured: boolean;
+  webhookConfigured: boolean;
 }) {
   return (
     <section className="mt-6 space-y-6">
@@ -62,6 +66,16 @@ export function SettingsPanel({
         description="Resend送信はサーバーAPI経由です。本番キーはサーバー環境変数へ設定してください。"
         title="メール送信サービス"
       >
+        <div className="flex flex-wrap gap-2 md:col-span-2">
+          <ConnectionBadge
+            configured={resendConfigured}
+            label="Resend API"
+          />
+          <ConnectionBadge
+            configured={webhookConfigured}
+            label="Webhook署名"
+          />
+        </div>
         <SelectField
           label="送信プロバイダー"
           onChange={(value) =>
@@ -76,16 +90,26 @@ export function SettingsPanel({
           value={settings.mailProvider}
         />
         <TextField
+          disabled={resendConfigured}
           label="Resend APIキー"
-          note={`現在：${maskSecret(secrets.resendApiKey)}／セッション終了時に消去`}
+          note={
+            resendConfigured
+              ? "Vercelの暗号化されたサーバー環境変数に設定済みです。"
+              : `現在：${maskSecret(secrets.resendApiKey)}／セッション終了時に消去`
+          }
           onChange={(value) => onSecretsChange({ resendApiKey: value })}
           placeholder="re_..."
           type="password"
           value={secrets.resendApiKey}
         />
         <TextField
+          disabled={webhookConfigured}
           label="Webhook署名シークレット"
-          note={`現在：${maskSecret(secrets.resendWebhookSecret)}／セッション終了時に消去`}
+          note={
+            webhookConfigured
+              ? "Vercelの暗号化されたサーバー環境変数に設定済みです。"
+              : `現在：${maskSecret(secrets.resendWebhookSecret)}／セッション終了時に消去`
+          }
           onChange={(value) =>
             onSecretsChange({ resendWebhookSecret: value })
           }
@@ -238,6 +262,7 @@ function SettingsSection({
 }
 
 function TextField({
+  disabled = false,
   label,
   note,
   onChange,
@@ -245,6 +270,7 @@ function TextField({
   type = "text",
   value,
 }: {
+  disabled?: boolean;
   label: string;
   note?: string;
   onChange: (value: string) => void;
@@ -257,7 +283,8 @@ function TextField({
       {label}
       <input
         autoComplete="off"
-        className="field mt-2"
+        className="field mt-2 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         type={type}
@@ -269,6 +296,26 @@ function TextField({
         </span>
       )}
     </label>
+  );
+}
+
+function ConnectionBadge({
+  configured,
+  label,
+}: {
+  configured: boolean;
+  label: string;
+}) {
+  return (
+    <span
+      className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+        configured
+          ? "bg-emerald-50 text-emerald-700"
+          : "bg-amber-50 text-amber-800"
+      }`}
+    >
+      {label}: {configured ? "設定済み" : "未設定"}
+    </span>
   );
 }
 

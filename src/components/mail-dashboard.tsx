@@ -184,6 +184,8 @@ export function MailDashboard() {
               onSettingsChange={dashboard.setSettings}
               secrets={dashboard.secrets}
               settings={dashboard.settings}
+              resendConfigured={dashboard.resendConfigured}
+              webhookConfigured={dashboard.webhookConfigured}
             />
             <SuppressionPanel
               entries={dashboard.suppressions}
