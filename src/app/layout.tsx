@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MailFlow",
-  description: "メール配信をシンプルに管理するためのダッシュボード",
+  title: "MailSend",
+  description: "購入者への個別メールをシンプルに管理するローカルMVP",
 };
 
 export default function RootLayout({

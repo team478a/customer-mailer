@@ -6,13 +6,13 @@ export default function LoginPage() {
       <section className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60 sm:p-10">
         <div className="mb-8">
           <p className="mb-3 text-sm font-semibold tracking-[0.18em] text-blue-600">
-            MAILFLOW
+            MAILSEND
           </p>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">
             おかえりなさい
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-500">
-            メール配信ダッシュボードへログインします。
+            購入者メール管理へログインします。
           </p>
         </div>
 
@@ -44,7 +44,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-xs leading-5 text-slate-400">
-          Phase 0の仮画面です。認証処理はまだ実装されていません。
+          ローカルMVPのため、入力内容にかかわらずログインできます。
         </p>
       </section>
     </main>
