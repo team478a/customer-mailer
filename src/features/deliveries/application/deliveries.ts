@@ -23,6 +23,11 @@ export async function executeDelivery(
   subject: string,
   body: string,
   now = new Date(),
+  sender?: {
+    fromName: string;
+    fromEmail: string;
+    replyTo: string;
+  },
 ): Promise<{ batch: DeliveryBatch; deliveries: Delivery[] }> {
   const batchId = crypto.randomUUID();
   const recipients = await Promise.all(
@@ -33,6 +38,9 @@ export async function executeDelivery(
         to: customer.email,
         subject: personalize(subject.trim(), customer),
         body: personalize(body.trim(), customer),
+        fromName: sender?.fromName,
+        fromEmail: sender?.fromEmail,
+        replyTo: sender?.replyTo,
       });
       return result.ok
         ? {

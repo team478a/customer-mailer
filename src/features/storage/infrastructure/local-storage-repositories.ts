@@ -9,6 +9,12 @@ import {
   DEFAULT_PROJECT_ID,
   Project,
 } from "../../projects/domain/project";
+import {
+  DEFAULT_PROJECT_SETTINGS,
+  EMPTY_PROJECT_SECRETS,
+  ProjectSecrets,
+  ProjectSettings,
+} from "../../settings/domain/project-settings";
 import { MailTemplate } from "../../templates/domain/mail-template";
 import {
   CustomerRepository,
@@ -17,6 +23,8 @@ import {
   DraftRepository,
   ProjectRepository,
   Repositories,
+  SecretSettingsRepository,
+  SettingsRepository,
   TemplateRepository,
 } from "../application/repositories";
 
@@ -33,6 +41,8 @@ export const STORAGE_NAMESPACES = {
   draft: "mailsend.draft",
   projects: "mailsend.projects",
   currentProject: "mailsend.currentProject",
+  settings: "mailsend.settings",
+  secretSettings: "mailsend.secretSettings",
 } as const;
 
 function parse<T>(value: string | null, fallback: T): T {
@@ -168,8 +178,51 @@ class LocalProjectRepository implements ProjectRepository {
   }
 }
 
+class LocalSettingsRepository implements SettingsRepository {
+  constructor(private readonly storage: StorageLike) {}
+  findByProject(projectId: string) {
+    return {
+      ...DEFAULT_PROJECT_SETTINGS,
+      ...parse<Partial<ProjectSettings>>(
+        this.storage.getItem(
+          projectStorageKey(STORAGE_NAMESPACES.settings, projectId),
+        ),
+        {},
+      ),
+    };
+  }
+  saveByProject(projectId: string, settings: ProjectSettings) {
+    this.storage.setItem(
+      projectStorageKey(STORAGE_NAMESPACES.settings, projectId),
+      JSON.stringify(settings),
+    );
+  }
+}
+
+class SessionSecretSettingsRepository implements SecretSettingsRepository {
+  constructor(private readonly storage: StorageLike) {}
+  findByProject(projectId: string) {
+    return {
+      ...EMPTY_PROJECT_SECRETS,
+      ...parse<Partial<ProjectSecrets>>(
+        this.storage.getItem(
+          projectStorageKey(STORAGE_NAMESPACES.secretSettings, projectId),
+        ),
+        {},
+      ),
+    };
+  }
+  saveByProject(projectId: string, secrets: ProjectSecrets) {
+    this.storage.setItem(
+      projectStorageKey(STORAGE_NAMESPACES.secretSettings, projectId),
+      JSON.stringify(secrets),
+    );
+  }
+}
+
 export function createLocalStorageRepositories(
   storage: StorageLike,
+  secretStorage: StorageLike = storage,
 ): Repositories {
   return {
     customers: new LocalCustomerRepository(storage),
@@ -178,5 +231,7 @@ export function createLocalStorageRepositories(
     deliveries: new LocalDeliveryRepository(storage),
     deliveryBatches: new LocalDeliveryBatchRepository(storage),
     projects: new LocalProjectRepository(storage),
+    settings: new LocalSettingsRepository(storage),
+    secretSettings: new SessionSecretSettingsRepository(secretStorage),
   };
 }

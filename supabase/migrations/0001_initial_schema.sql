@@ -69,6 +69,25 @@ create table public.drafts (
   updated_at timestamptz not null default now()
 );
 
+create table public.project_settings (
+  project_id uuid primary key references public.projects(id) on delete cascade,
+  mail_provider text not null default 'local'
+    check (mail_provider in ('local', 'resend')),
+  data_provider text not null default 'local'
+    check (data_provider in ('local', 'supabase')),
+  from_name text not null default 'MailSend',
+  from_email text not null default '',
+  reply_to text not null default '',
+  subject_prefix text not null default '',
+  signature text not null default '',
+  footer text not null default '',
+  include_unsubscribe_footer boolean not null default true,
+  test_mode boolean not null default true,
+  batch_size integer not null default 20 check (batch_size between 1 and 100),
+  delay_ms integer not null default 500 check (delay_ms between 0 and 60000),
+  updated_at timestamptz not null default now()
+);
+
 create table public.deliveries (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,
@@ -118,6 +137,7 @@ alter table public.project_members enable row level security;
 alter table public.customers enable row level security;
 alter table public.mail_templates enable row level security;
 alter table public.drafts enable row level security;
+alter table public.project_settings enable row level security;
 alter table public.deliveries enable row level security;
 alter table public.delivery_recipients enable row level security;
 alter table public.suppression_list enable row level security;
@@ -153,6 +173,11 @@ create policy "members can access templates"
 
 create policy "members can access drafts"
   on public.drafts for all
+  using (public.is_project_member(project_id))
+  with check (public.is_project_member(project_id));
+
+create policy "members can access project settings"
+  on public.project_settings for all
   using (public.is_project_member(project_id))
   with check (public.is_project_member(project_id));
 

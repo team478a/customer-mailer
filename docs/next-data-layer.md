@@ -32,8 +32,11 @@ interface MailDeliveryService {
 - `customers`：プロジェクト別顧客
 - `mail_templates`：テンプレート
 - `drafts`：プロジェクトごとの下書き
+- `project_settings`：送信元・送信制御などの非秘密設定
 - `deliveries`：配信バッチ
 - `delivery_recipients`：宛先別本文・結果・試行回数
 - `suppression_list`：配信停止・送信禁止アドレス
 
 すべての業務データはプロジェクトを起点にRLSで分離します。実際に適用する前に、プロジェクト作成時のowner登録処理、更新日時トリガー、運用上の保持期間を確定する必要があります。
+
+Resend APIキー、Webhook署名シークレット、Supabaseの`service_role`キーは`project_settings`へ保存しません。本番ではサーバー側の暗号化されたシークレット管理機構を使用し、ブラウザへ復号済みの値を返さない設計にします。

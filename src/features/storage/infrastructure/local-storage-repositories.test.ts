@@ -53,4 +53,32 @@ describe("local storage repositories", () => {
     ]);
     expect(repositories.deliveryBatches.findByProject("project-b")).toEqual([]);
   });
+
+  it("通常設定と秘密情報を別のストレージへ保存する", () => {
+    const persistent = new MemoryStorage();
+    const session = new MemoryStorage();
+    const repositories = createLocalStorageRepositories(persistent, session);
+    const settings = repositories.settings.findByProject("project-a");
+    repositories.settings.saveByProject("project-a", {
+      ...settings,
+      fromName: "テストショップ",
+    });
+    repositories.secretSettings.saveByProject("project-a", {
+      resendApiKey: "re_test_secret",
+      resendWebhookSecret: "whsec_test",
+    });
+
+    const reloaded = createLocalStorageRepositories(persistent, session);
+    expect(reloaded.settings.findByProject("project-a").fromName).toBe(
+      "テストショップ",
+    );
+    expect(
+      reloaded.secretSettings.findByProject("project-a").resendApiKey,
+    ).toBe("re_test_secret");
+    expect(
+      createLocalStorageRepositories(persistent, new MemoryStorage())
+        .secretSettings.findByProject("project-a")
+        .resendApiKey,
+    ).toBe("");
+  });
 });

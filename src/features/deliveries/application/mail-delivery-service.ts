@@ -4,6 +4,9 @@ export type SendMailInput = {
   to: string;
   subject: string;
   body: string;
+  fromName?: string;
+  fromEmail?: string;
+  replyTo?: string;
 };
 
 export type SendMailResult =

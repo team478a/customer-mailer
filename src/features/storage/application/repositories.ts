@@ -5,6 +5,10 @@ import {
   DeliveryBatch,
 } from "../../deliveries/domain/delivery";
 import { Project } from "../../projects/domain/project";
+import {
+  ProjectSecrets,
+  ProjectSettings,
+} from "../../settings/domain/project-settings";
 import { MailTemplate } from "../../templates/domain/mail-template";
 
 export interface CustomerRepository {
@@ -39,6 +43,16 @@ export interface ProjectRepository {
   setCurrentId(projectId: string): void;
 }
 
+export interface SettingsRepository {
+  findByProject(projectId: string): ProjectSettings;
+  saveByProject(projectId: string, settings: ProjectSettings): void;
+}
+
+export interface SecretSettingsRepository {
+  findByProject(projectId: string): ProjectSecrets;
+  saveByProject(projectId: string, secrets: ProjectSecrets): void;
+}
+
 export type Repositories = {
   customers: CustomerRepository;
   templates: TemplateRepository;
@@ -46,4 +60,6 @@ export type Repositories = {
   deliveries: DeliveryRepository;
   deliveryBatches: DeliveryBatchRepository;
   projects: ProjectRepository;
+  settings: SettingsRepository;
+  secretSettings: SecretSettingsRepository;
 };

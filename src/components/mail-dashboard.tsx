@@ -15,6 +15,7 @@ import { DeliveryHistory } from "@/features/deliveries/ui/delivery-history";
 import { RetryConfirmationDialog } from "@/features/deliveries/ui/retry-confirmation-dialog";
 import { ProjectDialog } from "@/features/projects/ui/project-dialog";
 import { ProjectSelector } from "@/features/projects/ui/project-selector";
+import { SettingsPanel } from "@/features/settings/ui/settings-panel";
 
 export function MailDashboard() {
   const dashboard = useMailDashboard();
@@ -42,7 +43,7 @@ export function MailDashboard() {
             </p>
           </div>
           <div className="inline-flex w-fit rounded-xl bg-slate-200/70 p-1">
-            {(["send", "history"] as const).map((view) => (
+            {(["send", "history", "settings"] as const).map((view) => (
               <button
                 className={`rounded-lg px-4 py-2 text-sm font-semibold ${
                   dashboard.activeView === view
@@ -53,7 +54,11 @@ export function MailDashboard() {
                 onClick={() => dashboard.setActiveView(view)}
                 type="button"
               >
-                {view === "send" ? "送信管理" : "配信履歴"}
+                {view === "send"
+                  ? "送信管理"
+                  : view === "history"
+                    ? "配信履歴"
+                    : "設定"}
               </button>
             ))}
           </div>
@@ -77,7 +82,7 @@ export function MailDashboard() {
           </div>
         )}
 
-        {dashboard.activeView === "send" ? (
+        {dashboard.activeView === "send" && (
           <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
             <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 p-5 sm:p-6">
@@ -132,7 +137,8 @@ export function MailDashboard() {
               templates={dashboard.templates}
             />
           </div>
-        ) : (
+        )}
+        {dashboard.activeView === "history" && (
           <DeliveryHistory
             batches={dashboard.deliveryBatches}
             deliveries={dashboard.deliveries}
@@ -142,6 +148,16 @@ export function MailDashboard() {
             onToggleAllFailures={dashboard.toggleAllFailures}
             onToggleFailure={dashboard.toggleFailure}
             selectedFailureIds={dashboard.selectedFailureIds}
+          />
+        )}
+        {dashboard.activeView === "settings" && (
+          <SettingsPanel
+            onReset={dashboard.resetSettings}
+            onSave={dashboard.saveSettings}
+            onSecretsChange={dashboard.setSecrets}
+            onSettingsChange={dashboard.setSettings}
+            secrets={dashboard.secrets}
+            settings={dashboard.settings}
           />
         )}
       </div>

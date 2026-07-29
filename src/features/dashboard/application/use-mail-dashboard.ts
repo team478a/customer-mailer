@@ -31,6 +31,16 @@ import {
 import { Repositories } from "../../storage/application/repositories";
 import { createLocalStorageRepositories } from "../../storage/infrastructure/local-storage-repositories";
 import {
+  applyMailSettings,
+  validateProjectSettings,
+} from "../../settings/application/settings";
+import {
+  DEFAULT_PROJECT_SETTINGS,
+  EMPTY_PROJECT_SECRETS,
+  ProjectSecrets,
+  ProjectSettings,
+} from "../../settings/domain/project-settings";
+import {
   BUILT_IN_TEMPLATES,
   createTemplate,
 } from "../../templates/application/templates";
@@ -54,14 +64,25 @@ export function useMailDashboard() {
   const [newProjectName, setNewProjectName] = useState("");
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [activeView, setActiveView] = useState<"send" | "history">("send");
+  const [activeView, setActiveView] = useState<
+    "send" | "history" | "settings"
+  >("send");
   const [isSending, setIsSending] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [selectedFailureIds, setSelectedFailureIds] = useState<string[]>([]);
   const [showRetryConfirmation, setShowRetryConfirmation] = useState(false);
+  const [settings, setSettings] = useState<ProjectSettings>(
+    DEFAULT_PROJECT_SETTINGS,
+  );
+  const [secrets, setSecrets] = useState<ProjectSecrets>(
+    EMPTY_PROJECT_SECRETS,
+  );
 
   useEffect(() => {
-    const repos = createLocalStorageRepositories(window.localStorage);
+    const repos = createLocalStorageRepositories(
+      window.localStorage,
+      window.sessionStorage,
+    );
     const storedProjects = repos.projects.findAll();
     const availableProjects = storedProjects.length
       ? storedProjects
@@ -83,6 +104,8 @@ export function useMailDashboard() {
     setCustomTemplates(repos.templates.findByProject(projectId));
     setSubject(draft.subject);
     setBody(draft.body);
+    setSettings(repos.settings.findByProject(projectId));
+    setSecrets(repos.secretSettings.findByProject(projectId));
   }, []);
 
   useEffect(() => {
@@ -139,6 +162,8 @@ export function useMailDashboard() {
       repositories.deliveryBatches.findByProject(projectId),
     );
     setCustomTemplates(repositories.templates.findByProject(projectId));
+    setSettings(repositories.settings.findByProject(projectId));
+    setSecrets(repositories.secretSettings.findByProject(projectId));
     setSubject(draft.subject);
     setBody(draft.body);
     setSelectedIds([]);
@@ -161,6 +186,8 @@ export function useMailDashboard() {
     setCustomTemplates([]);
     setSubject("");
     setBody("");
+    setSettings(DEFAULT_PROJECT_SETTINGS);
+    setSecrets(EMPTY_PROJECT_SECRETS);
     setSelectedIds([]);
     setSelectedFailureIds([]);
     setNotice(`プロジェクト「${project.name}」を作成しました。`);
@@ -256,11 +283,18 @@ export function useMailDashboard() {
           ? "ローカル検証用の一時的な送信エラー"
           : undefined,
       );
+      const configuredMail = applyMailSettings(subject, body, settings);
       const { batch, deliveries: created } = await executeDelivery(
         service,
         selectedCustomers,
-        subject,
-        body,
+        configuredMail.subject,
+        configuredMail.body,
+        new Date(),
+        {
+          fromName: settings.fromName,
+          fromEmail: settings.fromEmail,
+          replyTo: settings.replyTo,
+        },
       );
       setDeliveries((current) => [...created, ...current]);
       setDeliveryBatches((current) => [batch, ...current]);
@@ -315,6 +349,26 @@ export function useMailDashboard() {
     URL.revokeObjectURL(url);
   }
 
+  function saveSettings() {
+    if (!repositories) return;
+    const validation = validateProjectSettings(settings, secrets);
+    if (!validation.ok) {
+      setNotice(validation.errors.join(" "));
+      return;
+    }
+    repositories.settings.saveByProject(currentProjectId, settings);
+    repositories.secretSettings.saveByProject(currentProjectId, secrets);
+    setNotice(
+      "設定を保存しました。秘密情報はこのブラウザセッション内だけで保持されます。",
+    );
+  }
+
+  function resetSettings() {
+    setSettings(DEFAULT_PROJECT_SETTINGS);
+    setSecrets(EMPTY_PROJECT_SECRETS);
+    setNotice("設定を初期値へ戻しました。保存すると反映されます。");
+  }
+
   return {
     activeView,
     body,
@@ -333,6 +387,7 @@ export function useMailDashboard() {
     notice,
     projects,
     searchQuery,
+    secrets,
     selectedCustomers,
     selectedIds,
     selectedFailureIds,
@@ -341,6 +396,7 @@ export function useMailDashboard() {
     showRetryConfirmation,
     showProjectForm,
     subject,
+    settings,
     templateName,
     templates: [...BUILT_IN_TEMPLATES, ...customTemplates],
     addCustomer: handleAddCustomer,
@@ -362,11 +418,16 @@ export function useMailDashboard() {
     retryFailed: handleRetryFailed,
     saveCustomer: handleUpdateCustomer,
     saveTemplate: handleSaveTemplate,
+    saveSettings,
     setActiveView,
     setBody,
     setEditingCustomer,
     setNewProjectName,
     setSearchQuery,
+    setSecrets: (patch: Partial<ProjectSecrets>) =>
+      setSecrets((current) => ({ ...current, ...patch })),
+    setSettings: (patch: Partial<ProjectSettings>) =>
+      setSettings((current) => ({ ...current, ...patch })),
     setShowConfirmation,
     setShowRetryConfirmation,
     setShowProjectForm,
@@ -390,6 +451,7 @@ export function useMailDashboard() {
     },
     simulateSend: handleSimulateSend,
     switchProject,
+    resetSettings,
     toggleAllRecipients,
     toggleRecipient: (id: string) =>
       setSelectedIds((current) =>
