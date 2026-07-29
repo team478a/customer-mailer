@@ -59,7 +59,7 @@ export function SettingsPanel({
       </div>
 
       <SettingsSection
-        description="現在はローカル送信を使用します。Resendを選択しても、サーバーAPI実装までは実メールを送信しません。"
+        description="Resend送信はサーバーAPI経由です。本番キーはサーバー環境変数へ設定してください。"
         title="メール送信サービス"
       >
         <SelectField
@@ -71,7 +71,7 @@ export function SettingsPanel({
           }
           options={[
             ["local", "ローカルシミュレーション"],
-            ["resend", "Resend（接続準備）"],
+            ["resend", "Resend（サーバー接続）"],
           ]}
           value={settings.mailProvider}
         />
@@ -94,7 +94,7 @@ export function SettingsPanel({
           value={secrets.resendWebhookSecret}
         />
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900 md:col-span-2">
-          秘密情報はLocalStorageへ保存しません。ローカルMVPではSessionStorageにのみ保持します。本番では管理者専用APIを経由し、サーバー側の暗号化ストレージへ保存してください。
+          ここで入力した値は接続確認用で、実送信には使用されません。本番の秘密情報はRESEND_API_KEYとRESEND_WEBHOOK_SECRETとしてサーバーだけに設定します。
         </div>
       </SettingsSection>
 
@@ -183,7 +183,7 @@ export function SettingsPanel({
       </SettingsSection>
 
       <SettingsSection
-        description="現在はLocalStorageを使用します。Supabaseを選択してもRepository実装までは切り替わりません。"
+        description="本番接続情報はサーバー環境変数から読み込みます。ブラウザ入力値は接続メモとしてのみ保存されます。"
         title="データ保存"
       >
         <SelectField
@@ -195,7 +195,7 @@ export function SettingsPanel({
           }
           options={[
             ["local", "LocalStorage"],
-            ["supabase", "Supabase（接続準備）"],
+            ["supabase", "Supabase（サーバー接続）"],
           ]}
           value={settings.dataProvider}
         />

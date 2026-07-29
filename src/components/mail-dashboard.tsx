@@ -196,6 +196,10 @@ export function MailDashboard() {
           warnings={dashboard.preflight.warnings}
           excludedCount={dashboard.preflight.excludedCustomers.length}
           previews={dashboard.preflight.previews}
+          isLive={
+            dashboard.settings.mailProvider === "resend" &&
+            !dashboard.settings.testMode
+          }
         />
       )}
       {dashboard.editingCustomer && (

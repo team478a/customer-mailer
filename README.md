@@ -2,7 +2,7 @@
 
 購入者へ最大100件程度のメールを個別送信するための、シンプルな管理システムです。
 
-現在は外部サービスへ接続しないローカルMVPです。購入者、送信内容、配信履歴はブラウザの `localStorage` に保存されます。メールの実送信は行わず、個別送信の結果をシミュレーションして記録します。
+外部設定なしではローカルMVPとして動作します。SupabaseとResendのサーバー環境変数を設定すると、Supabase Authによる認証とサーバーAPI経由の実メール送信を利用できます。
 
 ## 現在できること
 
@@ -26,6 +26,11 @@
 - 配信履歴のCSV出力
 - 配信バッチ単位の本文・宛先別結果確認
 - 復元前の自動バックアップ
+- Supabase Authによるサーバー認証（設定時）
+- Resendによる宛先別実送信（設定時・テストモード解除時）
+- 送信要求とResend APIの冪等性キーによる二重送信防止
+- 署名検証・重複排除付きResend Webhook
+- バウンス・迷惑メール報告の配信停止リスト自動反映
 
 ## 技術構成
 
@@ -93,6 +98,37 @@ npm run dev
 
 ブラウザで `http://localhost:3000` を開いてください。
 
+## サーバー接続
+
+`.env.example`を参考に、デプロイ先のサーバー環境変数へSupabaseとResendの値を設定します。`SUPABASE_SERVICE_ROLE_KEY`、`RESEND_API_KEY`、`RESEND_WEBHOOK_SECRET`を`NEXT_PUBLIC_`付き変数へ入れたり、ブラウザへ返したりしないでください。
+
+Supabaseへ以下の順序でマイグレーションを適用します。
+
+```text
+supabase/migrations/0001_initial_schema.sql
+supabase/migrations/0002_server_operations.sql
+```
+
+Resend Webhookの送信先は次のURLです。
+
+```text
+https://your-domain.example/api/webhooks/resend
+```
+
+管理画面で送信プロバイダーを`Resend`にしてテストモードを解除した場合だけ、`POST /api/deliveries`が実メールを送信します。テストモード中はローカルシミュレーションです。
+
+サーバーAPIは次の安全策を持ちます。
+
+- Supabase Authのログイン必須
+- RLSによるプロジェクト所属確認
+- 1回100宛先までの入力検証
+- DBとResend双方の冪等性キー
+- DB配信停止リストの再検査
+- Webhook署名検証と`svix-id`重複排除
+- バウンス・苦情アドレスの自動送信除外
+
+既存のLocalStorageデータは自動的にはSupabaseへ移行されません。実送信するプロジェクトと顧客は、Supabase側にも同じUUIDで登録されている必要があります。
+
 ## 検証
 
 ```bash
@@ -111,4 +147,4 @@ GitHub ActionsではPull Requestと`master`へのpush時に、依存関係のク
 
 ## 今後の接続ポイント
 
-永続化をSupabase、個別メール送信をResendなどのサーバー側サービスへ差し替えられる構成を想定しています。顧客管理、CSV取込、テンプレート、LeadHIVE・CRM連携、ステップメール、開封・クリック計測はMVP以降の対象です。
+次の主な工程は、LocalStorageからSupabaseへのデータ移行UI、Supabase Repositoryへの完全切り替え、非同期ジョブキューです。LeadHIVE・CRM連携、ステップメール、開封・クリック分析はMVP以降の対象です。

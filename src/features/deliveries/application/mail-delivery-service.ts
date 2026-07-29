@@ -7,6 +7,7 @@ export type SendMailInput = {
   fromName?: string;
   fromEmail?: string;
   replyTo?: string;
+  idempotencyKey?: string;
 };
 
 export type SendMailResult =

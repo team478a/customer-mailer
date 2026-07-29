@@ -8,6 +8,7 @@ export function ConfirmationDialog({
   warnings,
   excludedCount,
   previews,
+  isLive,
 }: {
   count: number;
   isSending: boolean;
@@ -18,6 +19,7 @@ export function ConfirmationDialog({
   warnings: string[];
   excludedCount: number;
   previews: { name: string; email: string; subject: string }[];
+  isLive: boolean;
 }) {
   return (
     <div
@@ -66,8 +68,10 @@ export function ConfirmationDialog({
             )}
           </div>
         )}
-        <p className="mt-4 text-xs text-amber-800">
-          ローカルシミュレーションのため、実際のメールは送信されません。
+        <p className={`mt-4 text-xs ${isLive ? "font-bold text-red-700" : "text-amber-800"}`}>
+          {isLive
+            ? "本番送信です。確認後、実際のメールが各宛先へ送信されます。"
+            : "ローカルシミュレーションのため、実際のメールは送信されません。"}
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <button
@@ -84,7 +88,11 @@ export function ConfirmationDialog({
             onClick={onConfirm}
             type="button"
           >
-            {isSending ? "処理中…" : `${count}件を記録`}
+            {isSending
+              ? "処理中…"
+              : isLive
+                ? `${count}件へ送信`
+                : `${count}件を記録`}
           </button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 # 次工程のデータ・送信層設計
 
-この文書と `supabase/migrations/0001_initial_schema.sql` は設計案です。現在のローカルMVPからSupabaseやResendへ接続するものではありません。
+`supabase/migrations/0001_initial_schema.sql`と`0002_server_operations.sql`にスキーマを実装し、認証・Resend送信・Webhook受信のサーバーAPIを追加しました。外部設定なしではローカルMVPとして動作します。
 
 ## 送信サービス
 
@@ -12,7 +12,7 @@ interface MailDeliveryService {
 }
 ```
 
-現在は `LocalSimulationMailDeliveryService` を使用します。次工程では同じ契約を実装する `ResendMailDeliveryService` をサーバー側に配置します。APIキーをブラウザへ渡してはいけません。
+テストモードでは `LocalSimulationMailDeliveryService`、本番送信ではサーバー専用の `ResendMailDeliveryService` を使用します。APIキーは`RESEND_API_KEY`からのみ読み込み、ブラウザへ渡しません。
 
 ## 配信モデル
 
@@ -37,6 +37,6 @@ interface MailDeliveryService {
 - `delivery_recipients`：宛先別本文・結果・試行回数
 - `suppression_list`：配信停止・送信禁止アドレス
 
-すべての業務データはプロジェクトを起点にRLSで分離します。実際に適用する前に、プロジェクト作成時のowner登録処理、更新日時トリガー、運用上の保持期間を確定する必要があります。
+すべての業務データはプロジェクトを起点にRLSで分離します。プロジェクト作成時のowner登録と更新日時トリガーは`0002_server_operations.sql`で追加しています。保持期間は運用設定として別途決定します。
 
-Resend APIキー、Webhook署名シークレット、Supabaseの`service_role`キーは`project_settings`へ保存しません。本番ではサーバー側の暗号化されたシークレット管理機構を使用し、ブラウザへ復号済みの値を返さない設計にします。
+Resend APIキー、Webhook署名シークレット、Supabaseの`service_role`キーは`project_settings`へ保存せず、デプロイ先の暗号化されたサーバー環境変数で管理します。

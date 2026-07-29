@@ -368,6 +368,50 @@ export function useMailDashboard() {
     if (isSending) return;
     setIsSending(true);
     try {
+      if (settings.mailProvider === "resend" && !settings.testMode) {
+        const configuredMail = applyMailSettings(subject, body, settings);
+        const response = await fetch("/api/deliveries", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestId: crypto.randomUUID(),
+            projectId: currentProjectId,
+            subject: configuredMail.subject,
+            body: configuredMail.body,
+            fromName: settings.fromName,
+            fromEmail: settings.fromEmail,
+            replyTo: settings.replyTo,
+            recipients: preflight.previews.map((preview) => {
+              const customer = preflight.eligibleCustomers.find(
+                (item) => item.email === preview.email,
+              );
+              return {
+                customerId: customer?.id ?? "",
+                customerName: preview.name,
+                email: preview.email,
+                subject: preview.subject,
+                body: preview.body,
+              };
+            }),
+          }),
+        });
+        const result = (await response.json()) as {
+          error?: string;
+          sent?: number;
+          failed?: number;
+          suppressed?: number;
+        };
+        if (!response.ok) {
+          setNotice(result.error ?? "サーバー送信に失敗しました。");
+          return;
+        }
+        setSelectedIds([]);
+        setShowConfirmation(false);
+        setNotice(
+          `実メール送信を処理しました。成功${result.sent ?? 0}件・失敗${result.failed ?? 0}件・除外${result.suppressed ?? 0}件`,
+        );
+        return;
+      }
       const service = new LocalSimulationMailDeliveryService((input) =>
         input.to.includes("+fail@")
           ? "ローカル検証用の一時的な送信エラー"
