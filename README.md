@@ -30,6 +30,24 @@
 - TypeScript（strict mode）
 - Tailwind CSS
 - ESLint
+- Vitest
+
+## アーキテクチャ
+
+機能ごとに `domain`、`application`、`infrastructure`、`ui` を分離しています。
+
+```text
+src/features/
+├── projects/
+├── customers/
+├── templates/
+├── composer/
+├── deliveries/
+├── storage/
+└── dashboard/
+```
+
+画面はRepositoryインターフェースを通じてデータへアクセスします。現在はLocalStorage実装を利用しており、将来はUIを変更せずSupabase実装へ差し替えられる構成です。
 
 ## セットアップ
 
@@ -46,8 +64,11 @@ npm run dev
 ```bash
 npm run lint
 npm run typecheck
+npm run test:run
 npm run build
 ```
+
+GitHub ActionsではPull Requestと`master`へのpush時に、依存関係のクリーンインストール、lint、型検査、テスト、本番ビルドを実行します。
 
 ## 画面
 
