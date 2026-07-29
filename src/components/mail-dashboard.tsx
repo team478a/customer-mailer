@@ -19,6 +19,7 @@ import { ProjectDeleteDialog } from "@/features/projects/ui/project-delete-dialo
 import { ProjectManagementPanel } from "@/features/projects/ui/project-management-panel";
 import { ProjectSelector } from "@/features/projects/ui/project-selector";
 import { SettingsPanel } from "@/features/settings/ui/settings-panel";
+import { SuppressionPanel } from "@/features/suppressions/ui/suppression-panel";
 
 export function MailDashboard() {
   const dashboard = useMailDashboard();
@@ -107,6 +108,8 @@ export function MailDashboard() {
                 <RecipientSelector
                   customers={dashboard.filteredCustomers}
                   onToggleAll={dashboard.toggleAllRecipients}
+                  onBulkDelete={dashboard.bulkDeleteCustomers}
+                  onBulkStatus={dashboard.bulkChangeStatus}
                   selectedIds={dashboard.selectedIds}
                 />
                 <CustomerList
@@ -173,6 +176,11 @@ export function MailDashboard() {
               secrets={dashboard.secrets}
               settings={dashboard.settings}
             />
+            <SuppressionPanel
+              entries={dashboard.suppressions}
+              onAdd={dashboard.addSuppression}
+              onRemove={dashboard.removeSuppression}
+            />
           </>
         )}
       </div>
@@ -184,6 +192,10 @@ export function MailDashboard() {
           onCancel={() => dashboard.setShowConfirmation(false)}
           onConfirm={dashboard.simulateSend}
           subject={dashboard.subject}
+          errors={dashboard.preflight.errors}
+          warnings={dashboard.preflight.warnings}
+          excludedCount={dashboard.preflight.excludedCustomers.length}
+          previews={dashboard.preflight.previews}
         />
       )}
       {dashboard.editingCustomer && (

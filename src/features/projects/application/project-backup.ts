@@ -7,6 +7,7 @@ import {
 import { ProjectSettings } from "../../settings/domain/project-settings";
 import { MailTemplate } from "../../templates/domain/mail-template";
 import { Project } from "../domain/project";
+import { SuppressionEntry } from "../../suppressions/domain/suppression";
 
 export const PROJECT_BACKUP_VERSION = 1;
 
@@ -20,16 +21,20 @@ export type ProjectBackup = {
   deliveries: Delivery[];
   deliveryBatches: DeliveryBatch[];
   settings: ProjectSettings;
+  suppressions: SuppressionEntry[];
 };
 
 export function createProjectBackup(
-  backup: Omit<ProjectBackup, "version" | "exportedAt">,
+  backup: Omit<ProjectBackup, "version" | "exportedAt" | "suppressions"> & {
+    suppressions?: SuppressionEntry[];
+  },
   now = new Date(),
 ): ProjectBackup {
   return {
     version: PROJECT_BACKUP_VERSION,
     exportedAt: now.toISOString(),
     ...backup,
+    suppressions: backup.suppressions ?? [],
   };
 }
 
@@ -52,6 +57,7 @@ export function parseProjectBackup(text: string):
     ) {
       return { ok: false, message: "バックアップの内容が不足しています。" };
     }
+    value.suppressions ??= [];
     if (value.customers.length > 100) {
       return {
         ok: false,

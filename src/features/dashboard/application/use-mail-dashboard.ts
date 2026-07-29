@@ -25,6 +25,7 @@ import {
   DeliveryBatch,
 } from "../../deliveries/domain/delivery";
 import { LocalSimulationMailDeliveryService } from "../../deliveries/infrastructure/local-simulation-mail-delivery-service";
+import { runDeliveryPreflight } from "../../deliveries/application/preflight";
 import { createProject } from "../../projects/application/projects";
 import {
   createProjectBackup,
@@ -52,6 +53,13 @@ import {
   createTemplate,
 } from "../../templates/application/templates";
 import { MailTemplate } from "../../templates/domain/mail-template";
+import {
+  addSuppression,
+} from "../../suppressions/application/suppressions";
+import {
+  SuppressionEntry,
+  SuppressionReason,
+} from "../../suppressions/domain/suppression";
 
 function safeFileName(value: string) {
   return value.replace(/[<>:"/\\|?*]/g, "-").trim() || "project";
@@ -108,6 +116,7 @@ export function useMailDashboard() {
   );
   const [showProjectDelete, setShowProjectDelete] = useState(false);
   const [csvErrors, setCsvErrors] = useState<CsvImportError[]>([]);
+  const [suppressions, setSuppressions] = useState<SuppressionEntry[]>([]);
 
   useEffect(() => {
     const repos = createLocalStorageRepositories(
@@ -133,6 +142,7 @@ export function useMailDashboard() {
     setDeliveries(repos.deliveries.findByProject(projectId));
     setDeliveryBatches(repos.deliveryBatches.findByProject(projectId));
     setCustomTemplates(repos.templates.findByProject(projectId));
+    setSuppressions(repos.suppressions.findByProject(projectId));
     setSubject(draft.subject);
     setBody(draft.body);
     const initialSettings = repos.settings.findByProject(projectId);
@@ -167,6 +177,9 @@ export function useMailDashboard() {
     repositories?.drafts.saveByProject(currentProjectId, { subject, body });
   }, [body, currentProjectId, repositories, subject]);
   useEffect(() => {
+    repositories?.suppressions.saveByProject(currentProjectId, suppressions);
+  }, [currentProjectId, repositories, suppressions]);
+  useEffect(() => {
     repositories?.projects.saveAll(projects);
     repositories?.projects.setCurrentId(currentProjectId);
   }, [currentProjectId, projects, repositories]);
@@ -193,6 +206,17 @@ export function useMailDashboard() {
     DEFAULT_PROJECT;
   const settingsDirty =
     JSON.stringify({ settings, secrets }) !== savedSettingsSignature;
+  const preflight = useMemo(
+    () =>
+      runDeliveryPreflight(
+        selectedCustomers,
+        suppressions,
+        subject,
+        body,
+        settings,
+      ),
+    [body, selectedCustomers, settings, subject, suppressions],
+  );
 
   function switchProject(projectId: string) {
     if (!repositories || projectId === currentProjectId) return;
@@ -210,6 +234,7 @@ export function useMailDashboard() {
       repositories.deliveryBatches.findByProject(projectId),
     );
     setCustomTemplates(repositories.templates.findByProject(projectId));
+    setSuppressions(repositories.suppressions.findByProject(projectId));
     const nextSettings = repositories.settings.findByProject(projectId);
     const nextSecrets = repositories.secretSettings.findByProject(projectId);
     setSettings(nextSettings);
@@ -240,6 +265,7 @@ export function useMailDashboard() {
     setDeliveries([]);
     setDeliveryBatches([]);
     setCustomTemplates([]);
+    setSuppressions([]);
     setSubject("");
     setBody("");
     setSettings(DEFAULT_PROJECT_SETTINGS);
@@ -350,7 +376,7 @@ export function useMailDashboard() {
       const configuredMail = applyMailSettings(subject, body, settings);
       const { batch, deliveries: created } = await executeDelivery(
         service,
-        selectedCustomers,
+        preflight.eligibleCustomers,
         configuredMail.subject,
         configuredMail.body,
         new Date(),
@@ -487,6 +513,7 @@ export function useMailDashboard() {
       repositories.deliveryBatches.findByProject(nextProject.id),
     );
     setCustomTemplates(repositories.templates.findByProject(nextProject.id));
+    setSuppressions(repositories.suppressions.findByProject(nextProject.id));
     setSubject(draft.subject);
     setBody(draft.body);
     setSettings(nextSettings);
@@ -508,6 +535,7 @@ export function useMailDashboard() {
       deliveries,
       deliveryBatches,
       settings,
+      suppressions,
     });
     downloadFile(
       JSON.stringify(backup, null, 2),
@@ -525,6 +553,12 @@ export function useMailDashboard() {
     const result = parseProjectBackup(await file.text());
     if (!result.ok) return setNotice(result.message);
     const backup = result.backup;
+    if (
+      !window.confirm(
+        `「${backup.project.name}」のバックアップ（顧客${backup.customers.length}件）で現在のデータを置き換えますか？`,
+      )
+    ) return;
+    exportProjectBackup();
     setCustomers(backup.customers);
     setCustomTemplates(backup.templates);
     setSubject(backup.draft.subject);
@@ -532,6 +566,7 @@ export function useMailDashboard() {
     setDeliveries(backup.deliveries);
     setDeliveryBatches(backup.deliveryBatches);
     setSettings(backup.settings);
+    setSuppressions(backup.suppressions);
     repositories?.settings.saveByProject(currentProjectId, backup.settings);
     setSavedSettingsSignature(
       JSON.stringify({ settings: backup.settings, secrets }),
@@ -544,7 +579,9 @@ export function useMailDashboard() {
       ),
     );
     setProjectNameDraft(backup.project.name);
-    setNotice("バックアップを現在のプロジェクトへ復元しました。");
+    setNotice(
+      "復元前データを自動ダウンロードし、バックアップを現在のプロジェクトへ復元しました。",
+    );
   }
 
   function exportCsvErrors() {
@@ -558,6 +595,48 @@ export function useMailDashboard() {
       )
       .join("\r\n")}`;
     downloadFile(csv, "mailsend-csv-errors.csv", "text/csv");
+  }
+
+  function handleAddSuppression(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const result = addSuppression(
+      suppressions,
+      String(form.get("email") ?? ""),
+      String(form.get("reason") ?? "手動除外") as SuppressionReason,
+    );
+    if (!result.ok) return setNotice(result.message);
+    setSuppressions(result.entries);
+    setSelectedIds((current) =>
+      current.filter(
+        (id) =>
+          customers.find((customer) => customer.id === id)?.email !==
+          result.entry.email,
+      ),
+    );
+    setNotice(`${result.entry.email}を配信停止リストへ追加しました。`);
+    event.currentTarget.reset();
+  }
+
+  function bulkChangeStatus(status: CustomerStatus) {
+    setCustomers((current) =>
+      current.map((customer) =>
+        selectedIds.includes(customer.id) ? { ...customer, status } : customer,
+      ),
+    );
+    setNotice(`${selectedIds.length}件のステータスを変更しました。`);
+  }
+
+  function bulkDeleteCustomers() {
+    if (
+      !selectedIds.length ||
+      !window.confirm(`選択した${selectedIds.length}件を削除しますか？`)
+    ) return;
+    setCustomers((current) =>
+      current.filter((customer) => !selectedIds.includes(customer.id)),
+    );
+    setSelectedIds([]);
+    setNotice("選択した購入者を削除しました。");
   }
 
   return {
@@ -592,9 +671,14 @@ export function useMailDashboard() {
     subject,
     settings,
     settingsDirty,
+    suppressions,
+    preflight,
     templateName,
     templates: [...BUILT_IN_TEMPLATES, ...customTemplates],
     addCustomer: handleAddCustomer,
+    addSuppression: handleAddSuppression,
+    bulkChangeStatus,
+    bulkDeleteCustomers,
     changeStatus: (id: string, status: CustomerStatus) =>
       setCustomers(changeCustomerStatus(customers, id, status)),
     clearCsvErrors: () => setCsvErrors([]),
@@ -610,6 +694,8 @@ export function useMailDashboard() {
     exportProjectBackup,
     importCsv: handleCsvImport,
     importProjectBackup,
+    removeSuppression: (id: string) =>
+      setSuppressions((current) => current.filter((entry) => entry.id !== id)),
     removeCustomer: (id: string) => {
       setCustomers(removeCustomer(customers, id));
       setSelectedIds((current) => current.filter((item) => item !== id));

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { Customer } from "../../customers/domain/customer";
 import {
   createLocalStorageRepositories,
+  STORAGE_NAMESPACES,
+  STORAGE_SCHEMA_VERSION,
   StorageLike,
 } from "./local-storage-repositories";
 
@@ -19,6 +21,27 @@ class MemoryStorage implements StorageLike {
 }
 
 describe("local storage repositories", () => {
+  it("ストレージスキーマのバージョンを初期化する", () => {
+    const storage = new MemoryStorage();
+    createLocalStorageRepositories(storage);
+    expect(storage.getItem(STORAGE_NAMESPACES.schemaVersion)).toBe(
+      String(STORAGE_SCHEMA_VERSION),
+    );
+  });
+
+  it("配信停止リストをプロジェクト別に分離する", () => {
+    const repositories = createLocalStorageRepositories(new MemoryStorage());
+    const entry = {
+      id: "s1",
+      email: "stop@example.com",
+      reason: "配信停止希望" as const,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    repositories.suppressions.saveByProject("project-a", [entry]);
+    expect(repositories.suppressions.findByProject("project-a")).toEqual([entry]);
+    expect(repositories.suppressions.findByProject("project-b")).toEqual([]);
+  });
+
   it("顧客データをプロジェクト別に分離する", () => {
     const repositories = createLocalStorageRepositories(new MemoryStorage());
     const customer: Customer = {

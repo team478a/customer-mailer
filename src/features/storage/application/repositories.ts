@@ -10,6 +10,7 @@ import {
   ProjectSettings,
 } from "../../settings/domain/project-settings";
 import { MailTemplate } from "../../templates/domain/mail-template";
+import { SuppressionEntry } from "../../suppressions/domain/suppression";
 
 export interface CustomerRepository {
   findByProject(projectId: string): Customer[];
@@ -53,6 +54,11 @@ export interface SecretSettingsRepository {
   saveByProject(projectId: string, secrets: ProjectSecrets): void;
 }
 
+export interface SuppressionRepository {
+  findByProject(projectId: string): SuppressionEntry[];
+  saveByProject(projectId: string, entries: SuppressionEntry[]): void;
+}
+
 export interface ProjectDataRepository {
   clearProject(projectId: string): void;
 }
@@ -66,5 +72,6 @@ export type Repositories = {
   projects: ProjectRepository;
   settings: SettingsRepository;
   secretSettings: SecretSettingsRepository;
+  suppressions: SuppressionRepository;
   projectData: ProjectDataRepository;
 };

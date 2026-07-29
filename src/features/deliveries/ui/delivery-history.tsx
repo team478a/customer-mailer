@@ -66,6 +66,37 @@ export function DeliveryHistory({
           配信履歴はまだありません。
         </div>
       ) : (
+        <>
+        {!!batches.length && (
+          <div className="divide-y divide-slate-100 border-b border-slate-100">
+            {batches.map((batch) => (
+              <details className="px-5 py-4 sm:px-6" key={batch.id}>
+                <summary className="cursor-pointer text-sm font-bold">
+                  {new Intl.DateTimeFormat("ja-JP", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                  }).format(new Date(batch.createdAt))}
+                  {" ・ "}{batch.subject || "（件名なし）"}{" ・ "}
+                  {batch.recipients.length}件（{batch.status}）
+                </summary>
+                <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm">
+                  <p className="whitespace-pre-wrap text-slate-600">{batch.body}</p>
+                  <ul className="mt-4 space-y-2">
+                    {batch.recipients.map((recipient) => (
+                      <li className="flex justify-between gap-4" key={recipient.id}>
+                        <span>{recipient.customerName} &lt;{recipient.email}&gt;</span>
+                        <span className={recipient.status === "失敗" ? "text-red-600" : "text-emerald-700"}>
+                          {recipient.status}
+                          {recipient.errorMessage ? `: ${recipient.errorMessage}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500">
@@ -142,6 +173,7 @@ export function DeliveryHistory({
             </tbody>
           </table>
         </div>
+        </>
       )}
     </section>
   );

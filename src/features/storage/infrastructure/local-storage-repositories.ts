@@ -16,6 +16,7 @@ import {
   ProjectSettings,
 } from "../../settings/domain/project-settings";
 import { MailTemplate } from "../../templates/domain/mail-template";
+import { SuppressionEntry } from "../../suppressions/domain/suppression";
 import {
   CustomerRepository,
   DeliveryRepository,
@@ -26,6 +27,7 @@ import {
   Repositories,
   SecretSettingsRepository,
   SettingsRepository,
+  SuppressionRepository,
   TemplateRepository,
 } from "../application/repositories";
 
@@ -45,7 +47,11 @@ export const STORAGE_NAMESPACES = {
   currentProject: "mailsend.currentProject",
   settings: "mailsend.settings",
   secretSettings: "mailsend.secretSettings",
+  suppressions: "mailsend.suppressions",
+  schemaVersion: "mailsend.schemaVersion",
 } as const;
+
+export const STORAGE_SCHEMA_VERSION = 1;
 
 function parse<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;
@@ -222,6 +228,24 @@ class SessionSecretSettingsRepository implements SecretSettingsRepository {
   }
 }
 
+class LocalSuppressionRepository implements SuppressionRepository {
+  constructor(private readonly storage: StorageLike) {}
+  findByProject(projectId: string) {
+    return parse<SuppressionEntry[]>(
+      this.storage.getItem(
+        projectStorageKey(STORAGE_NAMESPACES.suppressions, projectId),
+      ),
+      [],
+    );
+  }
+  saveByProject(projectId: string, entries: SuppressionEntry[]) {
+    this.storage.setItem(
+      projectStorageKey(STORAGE_NAMESPACES.suppressions, projectId),
+      JSON.stringify(entries),
+    );
+  }
+}
+
 class LocalProjectDataRepository implements ProjectDataRepository {
   constructor(
     private readonly storage: StorageLike,
@@ -235,6 +259,7 @@ class LocalProjectDataRepository implements ProjectDataRepository {
       STORAGE_NAMESPACES.templates,
       STORAGE_NAMESPACES.draft,
       STORAGE_NAMESPACES.settings,
+      STORAGE_NAMESPACES.suppressions,
     ].forEach((namespace) =>
       this.storage.removeItem(projectStorageKey(namespace, projectId)),
     );
@@ -248,6 +273,12 @@ export function createLocalStorageRepositories(
   storage: StorageLike,
   secretStorage: StorageLike = storage,
 ): Repositories {
+  if (!storage.getItem(STORAGE_NAMESPACES.schemaVersion)) {
+    storage.setItem(
+      STORAGE_NAMESPACES.schemaVersion,
+      String(STORAGE_SCHEMA_VERSION),
+    );
+  }
   return {
     customers: new LocalCustomerRepository(storage),
     templates: new LocalTemplateRepository(storage),
@@ -257,6 +288,7 @@ export function createLocalStorageRepositories(
     projects: new LocalProjectRepository(storage),
     settings: new LocalSettingsRepository(storage),
     secretSettings: new SessionSecretSettingsRepository(secretStorage),
+    suppressions: new LocalSuppressionRepository(storage),
     projectData: new LocalProjectDataRepository(storage, secretStorage),
   };
 }
