@@ -5,6 +5,7 @@ import {
 } from "../domain/project-settings";
 
 export function SettingsPanel({
+  isDirty,
   onReset,
   onSave,
   onSecretsChange,
@@ -12,6 +13,7 @@ export function SettingsPanel({
   secrets,
   settings,
 }: {
+  isDirty: boolean;
   onReset: () => void;
   onSave: () => void;
   onSecretsChange: (patch: Partial<ProjectSecrets>) => void;
@@ -24,7 +26,14 @@ export function SettingsPanel({
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
           <div>
-            <p className="text-sm font-bold text-indigo-600">ADMIN SETTINGS</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-indigo-600">ADMIN SETTINGS</p>
+              {isDirty && (
+                <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+                  未保存
+                </span>
+              )}
+            </div>
             <h2 className="mt-1 text-xl font-bold">プロジェクト設定</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               接続先、送信元、送信制御、メール表示をプロジェクト単位で管理します。

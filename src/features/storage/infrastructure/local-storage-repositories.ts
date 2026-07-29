@@ -22,6 +22,7 @@ import {
   DeliveryBatchRepository,
   DraftRepository,
   ProjectRepository,
+  ProjectDataRepository,
   Repositories,
   SecretSettingsRepository,
   SettingsRepository,
@@ -31,6 +32,7 @@ import {
 export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem(key: string): void;
 }
 
 export const STORAGE_NAMESPACES = {
@@ -220,6 +222,28 @@ class SessionSecretSettingsRepository implements SecretSettingsRepository {
   }
 }
 
+class LocalProjectDataRepository implements ProjectDataRepository {
+  constructor(
+    private readonly storage: StorageLike,
+    private readonly secretStorage: StorageLike,
+  ) {}
+  clearProject(projectId: string) {
+    [
+      STORAGE_NAMESPACES.customers,
+      STORAGE_NAMESPACES.deliveries,
+      STORAGE_NAMESPACES.deliveryBatches,
+      STORAGE_NAMESPACES.templates,
+      STORAGE_NAMESPACES.draft,
+      STORAGE_NAMESPACES.settings,
+    ].forEach((namespace) =>
+      this.storage.removeItem(projectStorageKey(namespace, projectId)),
+    );
+    this.secretStorage.removeItem(
+      projectStorageKey(STORAGE_NAMESPACES.secretSettings, projectId),
+    );
+  }
+}
+
 export function createLocalStorageRepositories(
   storage: StorageLike,
   secretStorage: StorageLike = storage,
@@ -233,5 +257,6 @@ export function createLocalStorageRepositories(
     projects: new LocalProjectRepository(storage),
     settings: new LocalSettingsRepository(storage),
     secretSettings: new SessionSecretSettingsRepository(secretStorage),
+    projectData: new LocalProjectDataRepository(storage, secretStorage),
   };
 }

@@ -53,6 +53,10 @@ export interface SecretSettingsRepository {
   saveByProject(projectId: string, secrets: ProjectSecrets): void;
 }
 
+export interface ProjectDataRepository {
+  clearProject(projectId: string): void;
+}
+
 export type Repositories = {
   customers: CustomerRepository;
   templates: TemplateRepository;
@@ -62,4 +66,5 @@ export type Repositories = {
   projects: ProjectRepository;
   settings: SettingsRepository;
   secretSettings: SecretSettingsRepository;
+  projectData: ProjectDataRepository;
 };

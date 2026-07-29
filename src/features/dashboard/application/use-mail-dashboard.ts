@@ -9,7 +9,10 @@ import {
   updateCustomer,
 } from "../../customers/application/customers";
 import { Customer, CustomerStatus } from "../../customers/domain/customer";
-import { importCustomersFromCsv } from "../../customers/infrastructure/csv";
+import {
+  CsvImportError,
+  importCustomersFromCsv,
+} from "../../customers/infrastructure/csv";
 import {
   countDeliveriesInMonth,
   createDeliveryHistoryCsv,
@@ -23,6 +26,10 @@ import {
 } from "../../deliveries/domain/delivery";
 import { LocalSimulationMailDeliveryService } from "../../deliveries/infrastructure/local-simulation-mail-delivery-service";
 import { createProject } from "../../projects/application/projects";
+import {
+  createProjectBackup,
+  parseProjectBackup,
+} from "../../projects/application/project-backup";
 import {
   DEFAULT_PROJECT,
   DEFAULT_PROJECT_ID,
@@ -45,6 +52,19 @@ import {
   createTemplate,
 } from "../../templates/application/templates";
 import { MailTemplate } from "../../templates/domain/mail-template";
+
+function safeFileName(value: string) {
+  return value.replace(/[<>:"/\\|?*]/g, "-").trim() || "project";
+}
+
+function downloadFile(content: string, name: string, type: string) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 export function useMailDashboard() {
   const [repositories, setRepositories] = useState<Repositories | null>(null);
@@ -77,6 +97,17 @@ export function useMailDashboard() {
   const [secrets, setSecrets] = useState<ProjectSecrets>(
     EMPTY_PROJECT_SECRETS,
   );
+  const [savedSettingsSignature, setSavedSettingsSignature] = useState(
+    JSON.stringify({
+      settings: DEFAULT_PROJECT_SETTINGS,
+      secrets: EMPTY_PROJECT_SECRETS,
+    }),
+  );
+  const [projectNameDraft, setProjectNameDraft] = useState(
+    DEFAULT_PROJECT.name,
+  );
+  const [showProjectDelete, setShowProjectDelete] = useState(false);
+  const [csvErrors, setCsvErrors] = useState<CsvImportError[]>([]);
 
   useEffect(() => {
     const repos = createLocalStorageRepositories(
@@ -104,8 +135,17 @@ export function useMailDashboard() {
     setCustomTemplates(repos.templates.findByProject(projectId));
     setSubject(draft.subject);
     setBody(draft.body);
-    setSettings(repos.settings.findByProject(projectId));
-    setSecrets(repos.secretSettings.findByProject(projectId));
+    const initialSettings = repos.settings.findByProject(projectId);
+    const initialSecrets = repos.secretSettings.findByProject(projectId);
+    setSettings(initialSettings);
+    setSecrets(initialSecrets);
+    setSavedSettingsSignature(
+      JSON.stringify({ settings: initialSettings, secrets: initialSecrets }),
+    );
+    setProjectNameDraft(
+      availableProjects.find((project) => project.id === projectId)?.name ??
+        DEFAULT_PROJECT.name,
+    );
   }, []);
 
   useEffect(() => {
@@ -151,9 +191,17 @@ export function useMailDashboard() {
   const currentProject =
     projects.find((project) => project.id === currentProjectId) ??
     DEFAULT_PROJECT;
+  const settingsDirty =
+    JSON.stringify({ settings, secrets }) !== savedSettingsSignature;
 
   function switchProject(projectId: string) {
     if (!repositories || projectId === currentProjectId) return;
+    if (
+      settingsDirty &&
+      !window.confirm("未保存の設定があります。破棄して切り替えますか？")
+    ) {
+      return;
+    }
     const draft = repositories.drafts.findByProject(projectId);
     setCurrentProjectId(projectId);
     setCustomers(repositories.customers.findByProject(projectId));
@@ -162,8 +210,16 @@ export function useMailDashboard() {
       repositories.deliveryBatches.findByProject(projectId),
     );
     setCustomTemplates(repositories.templates.findByProject(projectId));
-    setSettings(repositories.settings.findByProject(projectId));
-    setSecrets(repositories.secretSettings.findByProject(projectId));
+    const nextSettings = repositories.settings.findByProject(projectId);
+    const nextSecrets = repositories.secretSettings.findByProject(projectId);
+    setSettings(nextSettings);
+    setSecrets(nextSecrets);
+    setSavedSettingsSignature(
+      JSON.stringify({ settings: nextSettings, secrets: nextSecrets }),
+    );
+    setProjectNameDraft(
+      projects.find((project) => project.id === projectId)?.name ?? "",
+    );
     setSubject(draft.subject);
     setBody(draft.body);
     setSelectedIds([]);
@@ -188,6 +244,13 @@ export function useMailDashboard() {
     setBody("");
     setSettings(DEFAULT_PROJECT_SETTINGS);
     setSecrets(EMPTY_PROJECT_SECRETS);
+    setSavedSettingsSignature(
+      JSON.stringify({
+        settings: DEFAULT_PROJECT_SETTINGS,
+        secrets: EMPTY_PROJECT_SECRETS,
+      }),
+    );
+    setProjectNameDraft(project.name);
     setSelectedIds([]);
     setSelectedFailureIds([]);
     setNotice(`プロジェクト「${project.name}」を作成しました。`);
@@ -229,6 +292,7 @@ export function useMailDashboard() {
           : ""
       }`,
     );
+    setCsvErrors(result.errors);
   }
 
   function handleUpdateCustomer(event: FormEvent<HTMLFormElement>) {
@@ -358,6 +422,7 @@ export function useMailDashboard() {
     }
     repositories.settings.saveByProject(currentProjectId, settings);
     repositories.secretSettings.saveByProject(currentProjectId, secrets);
+    setSavedSettingsSignature(JSON.stringify({ settings, secrets }));
     setNotice(
       "設定を保存しました。秘密情報はこのブラウザセッション内だけで保持されます。",
     );
@@ -369,11 +434,138 @@ export function useMailDashboard() {
     setNotice("設定を初期値へ戻しました。保存すると反映されます。");
   }
 
+  function changeActiveView(view: "send" | "history" | "settings") {
+    if (activeView === "settings" && view !== "settings" && settingsDirty) {
+      if (!window.confirm("未保存の設定があります。破棄して移動しますか？")) {
+        return;
+      }
+      if (repositories) {
+        const storedSettings =
+          repositories.settings.findByProject(currentProjectId);
+        const storedSecrets =
+          repositories.secretSettings.findByProject(currentProjectId);
+        setSettings(storedSettings);
+        setSecrets(storedSecrets);
+        setSavedSettingsSignature(
+          JSON.stringify({
+            settings: storedSettings,
+            secrets: storedSecrets,
+          }),
+        );
+      }
+    }
+    setActiveView(view);
+  }
+
+  function renameProject() {
+    const name = projectNameDraft.trim();
+    if (!name) return setNotice("プロジェクト名を入力してください。");
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === currentProjectId ? { ...project, name } : project,
+      ),
+    );
+    setNotice(`プロジェクト名を「${name}」へ変更しました。`);
+  }
+
+  function deleteCurrentProject() {
+    if (!repositories || projects.length <= 1) return;
+    repositories.projectData.clearProject(currentProjectId);
+    const remaining = projects.filter(
+      (project) => project.id !== currentProjectId,
+    );
+    const nextProject = remaining[0];
+    const draft = repositories.drafts.findByProject(nextProject.id);
+    const nextSettings = repositories.settings.findByProject(nextProject.id);
+    const nextSecrets =
+      repositories.secretSettings.findByProject(nextProject.id);
+    setProjects(remaining);
+    setCurrentProjectId(nextProject.id);
+    setCustomers(repositories.customers.findByProject(nextProject.id));
+    setDeliveries(repositories.deliveries.findByProject(nextProject.id));
+    setDeliveryBatches(
+      repositories.deliveryBatches.findByProject(nextProject.id),
+    );
+    setCustomTemplates(repositories.templates.findByProject(nextProject.id));
+    setSubject(draft.subject);
+    setBody(draft.body);
+    setSettings(nextSettings);
+    setSecrets(nextSecrets);
+    setSavedSettingsSignature(
+      JSON.stringify({ settings: nextSettings, secrets: nextSecrets }),
+    );
+    setProjectNameDraft(nextProject.name);
+    setShowProjectDelete(false);
+    setNotice("プロジェクトを削除しました。");
+  }
+
+  function exportProjectBackup() {
+    const backup = createProjectBackup({
+      project: currentProject,
+      customers,
+      templates: customTemplates,
+      draft: { subject, body },
+      deliveries,
+      deliveryBatches,
+      settings,
+    });
+    downloadFile(
+      JSON.stringify(backup, null, 2),
+      `mailsend-${safeFileName(currentProject.name)}-${new Date()
+        .toISOString()
+        .slice(0, 10)}.json`,
+      "application/json",
+    );
+  }
+
+  async function importProjectBackup(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const result = parseProjectBackup(await file.text());
+    if (!result.ok) return setNotice(result.message);
+    const backup = result.backup;
+    setCustomers(backup.customers);
+    setCustomTemplates(backup.templates);
+    setSubject(backup.draft.subject);
+    setBody(backup.draft.body);
+    setDeliveries(backup.deliveries);
+    setDeliveryBatches(backup.deliveryBatches);
+    setSettings(backup.settings);
+    repositories?.settings.saveByProject(currentProjectId, backup.settings);
+    setSavedSettingsSignature(
+      JSON.stringify({ settings: backup.settings, secrets }),
+    );
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === currentProjectId
+          ? { ...project, name: backup.project.name }
+          : project,
+      ),
+    );
+    setProjectNameDraft(backup.project.name);
+    setNotice("バックアップを現在のプロジェクトへ復元しました。");
+  }
+
+  function exportCsvErrors() {
+    const rows = [
+      ["行番号", "エラー"],
+      ...csvErrors.map((error) => [String(error.line), error.message]),
+    ];
+    const csv = `\uFEFF${rows
+      .map((row) =>
+        row.map((value) => `"${value.replaceAll('"', '""')}"`).join(","),
+      )
+      .join("\r\n")}`;
+    downloadFile(csv, "mailsend-csv-errors.csv", "text/csv");
+  }
+
   return {
     activeView,
     body,
     currentProject,
     currentProjectId,
+    csvErrors,
     customTemplates,
     customers,
     deliveries,
@@ -386,6 +578,7 @@ export function useMailDashboard() {
     newProjectName,
     notice,
     projects,
+    projectNameDraft,
     searchQuery,
     secrets,
     selectedCustomers,
@@ -395,34 +588,43 @@ export function useMailDashboard() {
     showConfirmation,
     showRetryConfirmation,
     showProjectForm,
+    showProjectDelete,
     subject,
     settings,
+    settingsDirty,
     templateName,
     templates: [...BUILT_IN_TEMPLATES, ...customTemplates],
     addCustomer: handleAddCustomer,
     changeStatus: (id: string, status: CustomerStatus) =>
       setCustomers(changeCustomerStatus(customers, id, status)),
+    clearCsvErrors: () => setCsvErrors([]),
     closeNotice: () => setNotice(""),
     createProject: handleCreateProject,
+    deleteCurrentProject,
     deleteTemplate: (id: string) =>
       setCustomTemplates((current) =>
         current.filter((template) => template.id !== id),
       ),
     exportHistory,
+    exportCsvErrors,
+    exportProjectBackup,
     importCsv: handleCsvImport,
+    importProjectBackup,
     removeCustomer: (id: string) => {
       setCustomers(removeCustomer(customers, id));
       setSelectedIds((current) => current.filter((item) => item !== id));
       setNotice("購入者を削除しました。");
     },
     retryFailed: handleRetryFailed,
+    renameProject,
     saveCustomer: handleUpdateCustomer,
     saveTemplate: handleSaveTemplate,
     saveSettings,
-    setActiveView,
+    setActiveView: changeActiveView,
     setBody,
     setEditingCustomer,
     setNewProjectName,
+    setProjectNameDraft,
     setSearchQuery,
     setSecrets: (patch: Partial<ProjectSecrets>) =>
       setSecrets((current) => ({ ...current, ...patch })),
@@ -431,6 +633,7 @@ export function useMailDashboard() {
     setShowConfirmation,
     setShowRetryConfirmation,
     setShowProjectForm,
+    setShowProjectDelete,
     setSubject,
     setTemplateName,
     toggleFailure: (id: string) =>

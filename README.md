@@ -67,6 +67,10 @@ src/features/
 - 配信停止案内の付与
 - LocalStorage／Supabaseデータプロバイダー
 - Supabase Project URL・anon key
+- プロジェクト名変更・削除
+- プロジェクト単位のJSONバックアップ・復元
+- CSV除外エラーの一覧表示・CSV出力
+- 設定変更の未保存表示・移動時確認
 
 通常設定はLocalStorage、APIキーなどの秘密情報はSessionStorageへ分離して保存します。秘密情報はブラウザを閉じると消えます。本番では管理者専用APIとサーバー側暗号化ストレージへ置き換える前提です。Supabaseの`service_role`キーは管理画面へ入力しないでください。
 

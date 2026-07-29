@@ -4,6 +4,7 @@ import { MailComposer } from "@/features/composer/ui/mail-composer";
 import { ConfirmationDialog } from "@/features/composer/ui/confirmation-dialog";
 import { MAX_CUSTOMERS } from "@/features/customers/domain/customer";
 import { CsvImportPanel } from "@/features/customers/ui/csv-import-panel";
+import { CsvErrorDialog } from "@/features/customers/ui/csv-error-dialog";
 import { CustomerDialog } from "@/features/customers/ui/customer-dialog";
 import { CustomerForm } from "@/features/customers/ui/customer-form";
 import { CustomerList } from "@/features/customers/ui/customer-list";
@@ -14,6 +15,8 @@ import { SummaryCards } from "@/features/dashboard/ui/summary-cards";
 import { DeliveryHistory } from "@/features/deliveries/ui/delivery-history";
 import { RetryConfirmationDialog } from "@/features/deliveries/ui/retry-confirmation-dialog";
 import { ProjectDialog } from "@/features/projects/ui/project-dialog";
+import { ProjectDeleteDialog } from "@/features/projects/ui/project-delete-dialog";
+import { ProjectManagementPanel } from "@/features/projects/ui/project-management-panel";
 import { ProjectSelector } from "@/features/projects/ui/project-selector";
 import { SettingsPanel } from "@/features/settings/ui/settings-panel";
 
@@ -151,14 +154,26 @@ export function MailDashboard() {
           />
         )}
         {dashboard.activeView === "settings" && (
-          <SettingsPanel
-            onReset={dashboard.resetSettings}
-            onSave={dashboard.saveSettings}
-            onSecretsChange={dashboard.setSecrets}
-            onSettingsChange={dashboard.setSettings}
-            secrets={dashboard.secrets}
-            settings={dashboard.settings}
-          />
+          <>
+            <ProjectManagementPanel
+              canDelete={dashboard.projects.length > 1}
+              name={dashboard.projectNameDraft}
+              onDelete={() => dashboard.setShowProjectDelete(true)}
+              onExport={dashboard.exportProjectBackup}
+              onImport={dashboard.importProjectBackup}
+              onNameChange={dashboard.setProjectNameDraft}
+              onRename={dashboard.renameProject}
+            />
+            <SettingsPanel
+              isDirty={dashboard.settingsDirty}
+              onReset={dashboard.resetSettings}
+              onSave={dashboard.saveSettings}
+              onSecretsChange={dashboard.setSecrets}
+              onSettingsChange={dashboard.setSettings}
+              secrets={dashboard.secrets}
+              settings={dashboard.settings}
+            />
+          </>
         )}
       </div>
 
@@ -192,6 +207,20 @@ export function MailDashboard() {
           isRetrying={dashboard.isRetrying}
           onCancel={() => dashboard.setShowRetryConfirmation(false)}
           onConfirm={dashboard.retryFailed}
+        />
+      )}
+      {dashboard.showProjectDelete && (
+        <ProjectDeleteDialog
+          name={dashboard.currentProject.name}
+          onCancel={() => dashboard.setShowProjectDelete(false)}
+          onConfirm={dashboard.deleteCurrentProject}
+        />
+      )}
+      {dashboard.csvErrors.length > 0 && (
+        <CsvErrorDialog
+          errors={dashboard.csvErrors}
+          onClose={dashboard.clearCsvErrors}
+          onExport={dashboard.exportCsvErrors}
         />
       )}
     </main>

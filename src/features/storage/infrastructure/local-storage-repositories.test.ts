@@ -13,6 +13,9 @@ class MemoryStorage implements StorageLike {
   setItem(key: string, value: string) {
     this.values.set(key, value);
   }
+  removeItem(key: string) {
+    this.values.delete(key);
+  }
 }
 
 describe("local storage repositories", () => {
@@ -80,5 +83,34 @@ describe("local storage repositories", () => {
         .secretSettings.findByProject("project-a")
         .resendApiKey,
     ).toBe("");
+  });
+
+  it("指定プロジェクトのデータと秘密情報だけを削除する", () => {
+    const persistent = new MemoryStorage();
+    const session = new MemoryStorage();
+    const repositories = createLocalStorageRepositories(persistent, session);
+    repositories.customers.saveByProject("project-a", [
+      {
+        id: "1",
+        name: "削除対象",
+        email: "delete@example.com",
+        orderNumber: "",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        status: "未対応",
+      },
+    ]);
+    repositories.secretSettings.saveByProject("project-a", {
+      resendApiKey: "re_delete",
+      resendWebhookSecret: "",
+    });
+    repositories.customers.saveByProject("project-b", []);
+
+    repositories.projectData.clearProject("project-a");
+
+    expect(repositories.customers.findByProject("project-a")).toEqual([]);
+    expect(
+      repositories.secretSettings.findByProject("project-a").resendApiKey,
+    ).toBe("");
+    expect(repositories.customers.findByProject("project-b")).toEqual([]);
   });
 });
