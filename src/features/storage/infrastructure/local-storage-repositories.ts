@@ -1,6 +1,9 @@
 import { MailDraft } from "../../composer/domain/draft";
 import { Customer } from "../../customers/domain/customer";
-import { Delivery } from "../../deliveries/domain/delivery";
+import {
+  Delivery,
+  DeliveryBatch,
+} from "../../deliveries/domain/delivery";
 import { projectStorageKey } from "../../projects/application/projects";
 import {
   DEFAULT_PROJECT_ID,
@@ -10,6 +13,7 @@ import { MailTemplate } from "../../templates/domain/mail-template";
 import {
   CustomerRepository,
   DeliveryRepository,
+  DeliveryBatchRepository,
   DraftRepository,
   ProjectRepository,
   Repositories,
@@ -24,6 +28,7 @@ export interface StorageLike {
 export const STORAGE_NAMESPACES = {
   customers: "mailsend.customers",
   deliveries: "mailsend.deliveries",
+  deliveryBatches: "mailsend.deliveryBatches",
   templates: "mailsend.templates",
   draft: "mailsend.draft",
   projects: "mailsend.projects",
@@ -123,6 +128,24 @@ class LocalDeliveryRepository implements DeliveryRepository {
   }
 }
 
+class LocalDeliveryBatchRepository implements DeliveryBatchRepository {
+  constructor(private readonly storage: StorageLike) {}
+  findByProject(projectId: string) {
+    return parse<DeliveryBatch[]>(
+      this.storage.getItem(
+        projectStorageKey(STORAGE_NAMESPACES.deliveryBatches, projectId),
+      ),
+      [],
+    );
+  }
+  saveByProject(projectId: string, batches: DeliveryBatch[]) {
+    this.storage.setItem(
+      projectStorageKey(STORAGE_NAMESPACES.deliveryBatches, projectId),
+      JSON.stringify(batches),
+    );
+  }
+}
+
 class LocalProjectRepository implements ProjectRepository {
   constructor(private readonly storage: StorageLike) {}
   findAll() {
@@ -153,6 +176,7 @@ export function createLocalStorageRepositories(
     templates: new LocalTemplateRepository(storage),
     drafts: new LocalDraftRepository(storage),
     deliveries: new LocalDeliveryRepository(storage),
+    deliveryBatches: new LocalDeliveryBatchRepository(storage),
     projects: new LocalProjectRepository(storage),
   };
 }

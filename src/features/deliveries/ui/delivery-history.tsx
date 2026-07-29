@@ -1,6 +1,7 @@
-import { Delivery } from "../domain/delivery";
+import { Delivery, DeliveryBatch } from "../domain/delivery";
 
 export function DeliveryHistory({
+  batches,
   deliveries,
   isRetrying,
   onExport,
@@ -9,6 +10,7 @@ export function DeliveryHistory({
   onToggleFailure,
   selectedFailureIds,
 }: {
+  batches: DeliveryBatch[];
   deliveries: Delivery[];
   isRetrying: boolean;
   onExport: () => void;
@@ -32,7 +34,8 @@ export function DeliveryHistory({
         <div>
           <h2 className="text-lg font-bold">配信履歴</h2>
           <p className="mt-1 text-sm text-slate-500">
-            このプロジェクトで記録した個別送信の履歴です。
+            このプロジェクトの配信{batches.length}回・宛先
+            {deliveries.length}件の履歴です。
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">

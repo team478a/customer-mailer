@@ -12,6 +12,7 @@ import { useMailDashboard } from "@/features/dashboard/application/use-mail-dash
 import { DashboardHeader } from "@/features/dashboard/ui/dashboard-header";
 import { SummaryCards } from "@/features/dashboard/ui/summary-cards";
 import { DeliveryHistory } from "@/features/deliveries/ui/delivery-history";
+import { RetryConfirmationDialog } from "@/features/deliveries/ui/retry-confirmation-dialog";
 import { ProjectDialog } from "@/features/projects/ui/project-dialog";
 import { ProjectSelector } from "@/features/projects/ui/project-selector";
 
@@ -133,10 +134,11 @@ export function MailDashboard() {
           </div>
         ) : (
           <DeliveryHistory
+            batches={dashboard.deliveryBatches}
             deliveries={dashboard.deliveries}
             isRetrying={dashboard.isRetrying}
             onExport={dashboard.exportHistory}
-            onRetry={dashboard.retryFailed}
+            onRetry={() => dashboard.setShowRetryConfirmation(true)}
             onToggleAllFailures={dashboard.toggleAllFailures}
             onToggleFailure={dashboard.toggleFailure}
             selectedFailureIds={dashboard.selectedFailureIds}
@@ -166,6 +168,14 @@ export function MailDashboard() {
           onCancel={() => dashboard.setShowProjectForm(false)}
           onNameChange={dashboard.setNewProjectName}
           onSubmit={dashboard.createProject}
+        />
+      )}
+      {dashboard.showRetryConfirmation && (
+        <RetryConfirmationDialog
+          deliveries={dashboard.selectedFailedDeliveries}
+          isRetrying={dashboard.isRetrying}
+          onCancel={() => dashboard.setShowRetryConfirmation(false)}
+          onConfirm={dashboard.retryFailed}
         />
       )}
     </main>

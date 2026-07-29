@@ -14,9 +14,13 @@ import {
   countDeliveriesInMonth,
   createDeliveryHistoryCsv,
   executeDelivery,
+  reconcileDeliveryBatches,
   retryFailedDeliveries,
 } from "../../deliveries/application/deliveries";
-import { Delivery } from "../../deliveries/domain/delivery";
+import {
+  Delivery,
+  DeliveryBatch,
+} from "../../deliveries/domain/delivery";
 import { LocalSimulationMailDeliveryService } from "../../deliveries/infrastructure/local-simulation-mail-delivery-service";
 import { createProject } from "../../projects/application/projects";
 import {
@@ -36,6 +40,7 @@ export function useMailDashboard() {
   const [repositories, setRepositories] = useState<Repositories | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [deliveryBatches, setDeliveryBatches] = useState<DeliveryBatch[]>([]);
   const [customTemplates, setCustomTemplates] = useState<MailTemplate[]>([]);
   const [projects, setProjects] = useState<Project[]>([DEFAULT_PROJECT]);
   const [currentProjectId, setCurrentProjectId] = useState(DEFAULT_PROJECT_ID);
@@ -53,6 +58,7 @@ export function useMailDashboard() {
   const [isSending, setIsSending] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [selectedFailureIds, setSelectedFailureIds] = useState<string[]>([]);
+  const [showRetryConfirmation, setShowRetryConfirmation] = useState(false);
 
   useEffect(() => {
     const repos = createLocalStorageRepositories(window.localStorage);
@@ -73,6 +79,7 @@ export function useMailDashboard() {
     setCurrentProjectId(projectId);
     setCustomers(repos.customers.findByProject(projectId));
     setDeliveries(repos.deliveries.findByProject(projectId));
+    setDeliveryBatches(repos.deliveryBatches.findByProject(projectId));
     setCustomTemplates(repos.templates.findByProject(projectId));
     setSubject(draft.subject);
     setBody(draft.body);
@@ -84,6 +91,12 @@ export function useMailDashboard() {
   useEffect(() => {
     repositories?.deliveries.saveByProject(currentProjectId, deliveries);
   }, [deliveries, currentProjectId, repositories]);
+  useEffect(() => {
+    repositories?.deliveryBatches.saveByProject(
+      currentProjectId,
+      deliveryBatches,
+    );
+  }, [currentProjectId, deliveryBatches, repositories]);
   useEffect(() => {
     repositories?.templates.saveByProject(currentProjectId, customTemplates);
   }, [customTemplates, currentProjectId, repositories]);
@@ -103,6 +116,15 @@ export function useMailDashboard() {
     () => customers.filter((customer) => selectedIds.includes(customer.id)),
     [customers, selectedIds],
   );
+  const selectedFailedDeliveries = useMemo(
+    () =>
+      deliveries.filter(
+        (delivery) =>
+          delivery.status === "失敗" &&
+          selectedFailureIds.includes(delivery.id),
+      ),
+    [deliveries, selectedFailureIds],
+  );
   const currentProject =
     projects.find((project) => project.id === currentProjectId) ??
     DEFAULT_PROJECT;
@@ -113,6 +135,9 @@ export function useMailDashboard() {
     setCurrentProjectId(projectId);
     setCustomers(repositories.customers.findByProject(projectId));
     setDeliveries(repositories.deliveries.findByProject(projectId));
+    setDeliveryBatches(
+      repositories.deliveryBatches.findByProject(projectId),
+    );
     setCustomTemplates(repositories.templates.findByProject(projectId));
     setSubject(draft.subject);
     setBody(draft.body);
@@ -132,6 +157,7 @@ export function useMailDashboard() {
     setCurrentProjectId(project.id);
     setCustomers([]);
     setDeliveries([]);
+    setDeliveryBatches([]);
     setCustomTemplates([]);
     setSubject("");
     setBody("");
@@ -237,6 +263,7 @@ export function useMailDashboard() {
         body,
       );
       setDeliveries((current) => [...created, ...current]);
+      setDeliveryBatches((current) => [batch, ...current]);
       setSelectedIds([]);
       setSubject("");
       setBody("");
@@ -259,13 +286,19 @@ export function useMailDashboard() {
         deliveries,
         selectedFailureIds,
       );
+      const updatedBatches = reconcileDeliveryBatches(
+        deliveryBatches,
+        updated,
+      );
       const succeeded = updated.filter(
         (delivery) =>
           selectedFailureIds.includes(delivery.id) &&
           delivery.status === "送信済み",
       ).length;
       setDeliveries(updated);
+      setDeliveryBatches(updatedBatches);
       setSelectedFailureIds([]);
+      setShowRetryConfirmation(false);
       setNotice(`${succeeded}件の再送シミュレーションが成功しました。`);
     } finally {
       setIsRetrying(false);
@@ -290,6 +323,7 @@ export function useMailDashboard() {
     customTemplates,
     customers,
     deliveries,
+    deliveryBatches,
     editingCustomer,
     filteredCustomers,
     isSending,
@@ -302,7 +336,9 @@ export function useMailDashboard() {
     selectedCustomers,
     selectedIds,
     selectedFailureIds,
+    selectedFailedDeliveries,
     showConfirmation,
+    showRetryConfirmation,
     showProjectForm,
     subject,
     templateName,
@@ -332,6 +368,7 @@ export function useMailDashboard() {
     setNewProjectName,
     setSearchQuery,
     setShowConfirmation,
+    setShowRetryConfirmation,
     setShowProjectForm,
     setSubject,
     setTemplateName,

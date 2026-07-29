@@ -122,6 +122,37 @@ export async function retryFailedDeliveries(
   );
 }
 
+export function reconcileDeliveryBatches(
+  batches: DeliveryBatch[],
+  deliveries: Delivery[],
+  now = new Date(),
+) {
+  return batches.map((batch) => {
+    const batchDeliveries = deliveries.filter(
+      (delivery) => delivery.batchId === batch.id,
+    );
+    if (!batchDeliveries.length) return batch;
+    const recipients = batch.recipients.map((recipient) => {
+      const delivery = batchDeliveries.find(
+        (item) => item.id === recipient.id,
+      );
+      return delivery
+        ? {
+            ...recipient,
+            status: delivery.status,
+            errorMessage: delivery.errorMessage,
+          }
+        : recipient;
+    });
+    return {
+      ...batch,
+      recipients,
+      status: resolveBatchStatus(recipients),
+      completedAt: now.toISOString(),
+    };
+  });
+}
+
 export function simulateDeliveries(
   customers: Customer[],
   subject: string,

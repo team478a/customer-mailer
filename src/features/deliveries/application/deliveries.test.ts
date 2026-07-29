@@ -5,6 +5,7 @@ import {
   executeDelivery,
   getRetryableRecipients,
   retryFailedDeliveries,
+  reconcileDeliveryBatches,
 } from "./deliveries";
 import { Delivery } from "../domain/delivery";
 import { Customer } from "../../customers/domain/customer";
@@ -116,5 +117,41 @@ describe("delivery utilities", () => {
       errorMessage: undefined,
     });
     expect(updated[1]).toEqual(sent);
+  });
+
+  it("再送結果を配信バッチの状態へ反映する", () => {
+    const batch = {
+      id: "batch-1",
+      subject: "件名",
+      body: "本文",
+      createdAt: "2026-07-20T00:00:00.000Z",
+      status: "一部失敗" as const,
+      recipients: [
+        {
+          id: "recipient-1",
+          customerId: "customer-1",
+          customerName: "顧客",
+          email: "retry@example.com",
+          status: "失敗" as const,
+        },
+      ],
+    };
+    const updatedDelivery: Delivery = {
+      id: "recipient-1",
+      batchId: "batch-1",
+      customerName: "顧客",
+      email: "retry@example.com",
+      subject: "件名",
+      sentAt: "2026-07-21T00:00:00.000Z",
+      status: "送信済み",
+    };
+    const [updatedBatch] = reconcileDeliveryBatches(
+      [batch],
+      [updatedDelivery],
+      new Date("2026-07-21T00:00:00.000Z"),
+    );
+
+    expect(updatedBatch.status).toBe("送信済み");
+    expect(updatedBatch.recipients[0].status).toBe("送信済み");
   });
 });

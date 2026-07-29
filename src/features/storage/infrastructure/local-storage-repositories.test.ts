@@ -34,4 +34,23 @@ describe("local storage repositories", () => {
     ]);
     expect(repositories.customers.findByProject("project-b")).toEqual([]);
   });
+
+  it("配信バッチをプロジェクト別に永続化する", () => {
+    const repositories = createLocalStorageRepositories(new MemoryStorage());
+    const batch = {
+      id: "batch-1",
+      subject: "件名",
+      body: "本文",
+      createdAt: "2026-07-20T00:00:00.000Z",
+      completedAt: "2026-07-20T00:00:00.000Z",
+      status: "送信済み" as const,
+      recipients: [],
+    };
+    repositories.deliveryBatches.saveByProject("project-a", [batch]);
+
+    expect(repositories.deliveryBatches.findByProject("project-a")).toEqual([
+      batch,
+    ]);
+    expect(repositories.deliveryBatches.findByProject("project-b")).toEqual([]);
+  });
 });

@@ -1,6 +1,9 @@
 import { MailDraft } from "../../composer/domain/draft";
 import { Customer } from "../../customers/domain/customer";
-import { Delivery } from "../../deliveries/domain/delivery";
+import {
+  Delivery,
+  DeliveryBatch,
+} from "../../deliveries/domain/delivery";
 import { Project } from "../../projects/domain/project";
 import { MailTemplate } from "../../templates/domain/mail-template";
 
@@ -24,6 +27,11 @@ export interface DeliveryRepository {
   saveByProject(projectId: string, deliveries: Delivery[]): void;
 }
 
+export interface DeliveryBatchRepository {
+  findByProject(projectId: string): DeliveryBatch[];
+  saveByProject(projectId: string, batches: DeliveryBatch[]): void;
+}
+
 export interface ProjectRepository {
   findAll(): Project[];
   saveAll(projects: Project[]): void;
@@ -36,5 +44,6 @@ export type Repositories = {
   templates: TemplateRepository;
   drafts: DraftRepository;
   deliveries: DeliveryRepository;
+  deliveryBatches: DeliveryBatchRepository;
   projects: ProjectRepository;
 };
