@@ -134,7 +134,12 @@ export function MailDashboard() {
         ) : (
           <DeliveryHistory
             deliveries={dashboard.deliveries}
+            isRetrying={dashboard.isRetrying}
             onExport={dashboard.exportHistory}
+            onRetry={dashboard.retryFailed}
+            onToggleAllFailures={dashboard.toggleAllFailures}
+            onToggleFailure={dashboard.toggleFailure}
+            selectedFailureIds={dashboard.selectedFailureIds}
           />
         )}
       </div>
@@ -142,6 +147,7 @@ export function MailDashboard() {
       {dashboard.showConfirmation && (
         <ConfirmationDialog
           count={dashboard.selectedCustomers.length}
+          isSending={dashboard.isSending}
           onCancel={() => dashboard.setShowConfirmation(false)}
           onConfirm={dashboard.simulateSend}
           subject={dashboard.subject}

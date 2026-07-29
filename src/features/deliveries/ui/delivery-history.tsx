@@ -2,11 +2,30 @@ import { Delivery } from "../domain/delivery";
 
 export function DeliveryHistory({
   deliveries,
+  isRetrying,
   onExport,
+  onRetry,
+  onToggleAllFailures,
+  onToggleFailure,
+  selectedFailureIds,
 }: {
   deliveries: Delivery[];
+  isRetrying: boolean;
   onExport: () => void;
+  onRetry: () => void;
+  onToggleAllFailures: () => void;
+  onToggleFailure: (id: string) => void;
+  selectedFailureIds: string[];
 }) {
+  const failedDeliveries = deliveries.filter(
+    (delivery) => delivery.status === "失敗",
+  );
+  const allFailuresSelected =
+    failedDeliveries.length > 0 &&
+    failedDeliveries.every((delivery) =>
+      selectedFailureIds.includes(delivery.id),
+    );
+
   return (
     <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-4 border-b border-slate-100 p-5 sm:p-6">
@@ -16,14 +35,28 @@ export function DeliveryHistory({
             このプロジェクトで記録した個別送信の履歴です。
           </p>
         </div>
-        <button
-          className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold disabled:opacity-40"
-          disabled={!deliveries.length}
-          onClick={onExport}
-          type="button"
-        >
-          CSV出力
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          {failedDeliveries.length > 0 && (
+            <button
+              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+              disabled={!selectedFailureIds.length || isRetrying}
+              onClick={onRetry}
+              type="button"
+            >
+              {isRetrying
+                ? "再送中…"
+                : `選択した${selectedFailureIds.length}件を再送`}
+            </button>
+          )}
+          <button
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold disabled:opacity-40"
+            disabled={!deliveries.length}
+            onClick={onExport}
+            type="button"
+          >
+            CSV出力
+          </button>
+        </div>
       </div>
       {!deliveries.length ? (
         <div className="px-6 py-16 text-center text-sm text-slate-500">
@@ -34,6 +67,17 @@ export function DeliveryHistory({
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500">
               <tr>
+                <th className="w-12 px-6 py-3">
+                  {failedDeliveries.length > 0 && (
+                    <input
+                      aria-label="失敗した宛先をすべて選択"
+                      checked={allFailuresSelected}
+                      className="h-4 w-4 accent-red-600"
+                      onChange={onToggleAllFailures}
+                      type="checkbox"
+                    />
+                  )}
+                </th>
                 {["送信日時", "購入者", "件名", "ステータス"].map((label) => (
                   <th className="px-6 py-3 font-semibold" key={label}>
                     {label}
@@ -44,6 +88,17 @@ export function DeliveryHistory({
             <tbody className="divide-y divide-slate-100">
               {deliveries.map((delivery) => (
                 <tr key={delivery.id}>
+                  <td className="px-6 py-4">
+                    {delivery.status === "失敗" && (
+                      <input
+                        aria-label={`${delivery.email}を再送対象に選択`}
+                        checked={selectedFailureIds.includes(delivery.id)}
+                        className="h-4 w-4 accent-red-600"
+                        onChange={() => onToggleFailure(delivery.id)}
+                        type="checkbox"
+                      />
+                    )}
+                  </td>
                   <td className="whitespace-nowrap px-6 py-4 text-slate-500">
                     {new Intl.DateTimeFormat("ja-JP", {
                       dateStyle: "short",
@@ -58,9 +113,26 @@ export function DeliveryHistory({
                     {delivery.subject}
                   </td>
                   <td className="px-6 py-4">
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                        delivery.status === "送信済み"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-red-50 text-red-700"
+                      }`}
+                      title={delivery.errorMessage}
+                    >
                       {delivery.status}
                     </span>
+                    {delivery.errorMessage && (
+                      <p className="mt-2 max-w-xs text-xs text-red-600">
+                        {delivery.errorMessage}
+                      </p>
+                    )}
+                    {!!delivery.retryCount && (
+                      <p className="mt-1 text-xs text-slate-400">
+                        再送 {delivery.retryCount}回
+                      </p>
+                    )}
                   </td>
                 </tr>
               ))}

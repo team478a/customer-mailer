@@ -13,9 +13,11 @@ import { importCustomersFromCsv } from "../../customers/infrastructure/csv";
 import {
   countDeliveriesInMonth,
   createDeliveryHistoryCsv,
-  simulateDeliveries,
+  executeDelivery,
+  retryFailedDeliveries,
 } from "../../deliveries/application/deliveries";
 import { Delivery } from "../../deliveries/domain/delivery";
+import { LocalSimulationMailDeliveryService } from "../../deliveries/infrastructure/local-simulation-mail-delivery-service";
 import { createProject } from "../../projects/application/projects";
 import {
   DEFAULT_PROJECT,
@@ -48,6 +50,9 @@ export function useMailDashboard() {
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [activeView, setActiveView] = useState<"send" | "history">("send");
+  const [isSending, setIsSending] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [selectedFailureIds, setSelectedFailureIds] = useState<string[]>([]);
 
   useEffect(() => {
     const repos = createLocalStorageRepositories(window.localStorage);
@@ -112,6 +117,7 @@ export function useMailDashboard() {
     setSubject(draft.subject);
     setBody(draft.body);
     setSelectedIds([]);
+    setSelectedFailureIds([]);
     setSearchQuery("");
     setNotice("");
   }
@@ -130,6 +136,7 @@ export function useMailDashboard() {
     setSubject("");
     setBody("");
     setSelectedIds([]);
+    setSelectedFailureIds([]);
     setNotice(`プロジェクト「${project.name}」を作成しました。`);
   }
 
@@ -214,14 +221,55 @@ export function useMailDashboard() {
     setNotice(`テンプレート「${template.name}」を保存しました。`);
   }
 
-  function handleSimulateSend() {
-    const created = simulateDeliveries(selectedCustomers, subject);
-    setDeliveries((current) => [...created, ...current]);
-    setSelectedIds([]);
-    setSubject("");
-    setBody("");
-    setShowConfirmation(false);
-    setNotice(`${created.length}件を個別送信として記録しました。`);
+  async function handleSimulateSend() {
+    if (isSending) return;
+    setIsSending(true);
+    try {
+      const service = new LocalSimulationMailDeliveryService((input) =>
+        input.to.includes("+fail@")
+          ? "ローカル検証用の一時的な送信エラー"
+          : undefined,
+      );
+      const { batch, deliveries: created } = await executeDelivery(
+        service,
+        selectedCustomers,
+        subject,
+        body,
+      );
+      setDeliveries((current) => [...created, ...current]);
+      setSelectedIds([]);
+      setSubject("");
+      setBody("");
+      setShowConfirmation(false);
+      setNotice(
+        `${created.length}件を個別送信として記録しました（${batch.status}）。`,
+      );
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  async function handleRetryFailed() {
+    if (isRetrying || selectedFailureIds.length === 0) return;
+    setIsRetrying(true);
+    try {
+      const service = new LocalSimulationMailDeliveryService();
+      const updated = await retryFailedDeliveries(
+        service,
+        deliveries,
+        selectedFailureIds,
+      );
+      const succeeded = updated.filter(
+        (delivery) =>
+          selectedFailureIds.includes(delivery.id) &&
+          delivery.status === "送信済み",
+      ).length;
+      setDeliveries(updated);
+      setSelectedFailureIds([]);
+      setNotice(`${succeeded}件の再送シミュレーションが成功しました。`);
+    } finally {
+      setIsRetrying(false);
+    }
   }
 
   function exportHistory() {
@@ -244,6 +292,8 @@ export function useMailDashboard() {
     deliveries,
     editingCustomer,
     filteredCustomers,
+    isSending,
+    isRetrying,
     monthlyDeliveryCount: countDeliveriesInMonth(deliveries),
     newProjectName,
     notice,
@@ -251,6 +301,7 @@ export function useMailDashboard() {
     searchQuery,
     selectedCustomers,
     selectedIds,
+    selectedFailureIds,
     showConfirmation,
     showProjectForm,
     subject,
@@ -272,6 +323,7 @@ export function useMailDashboard() {
       setSelectedIds((current) => current.filter((item) => item !== id));
       setNotice("購入者を削除しました。");
     },
+    retryFailed: handleRetryFailed,
     saveCustomer: handleUpdateCustomer,
     saveTemplate: handleSaveTemplate,
     setActiveView,
@@ -283,6 +335,22 @@ export function useMailDashboard() {
     setShowProjectForm,
     setSubject,
     setTemplateName,
+    toggleFailure: (id: string) =>
+      setSelectedFailureIds((current) =>
+        current.includes(id)
+          ? current.filter((item) => item !== id)
+          : [...current, id],
+      ),
+    toggleAllFailures: () => {
+      const failedIds = deliveries
+        .filter((delivery) => delivery.status === "失敗")
+        .map((delivery) => delivery.id);
+      setSelectedFailureIds(
+        failedIds.every((id) => selectedFailureIds.includes(id))
+          ? []
+          : failedIds,
+      );
+    },
     simulateSend: handleSimulateSend,
     switchProject,
     toggleAllRecipients,

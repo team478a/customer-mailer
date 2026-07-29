@@ -1,10 +1,12 @@
 export function ConfirmationDialog({
   count,
+  isSending,
   onCancel,
   onConfirm,
   subject,
 }: {
   count: number;
+  isSending: boolean;
   onCancel: () => void;
   onConfirm: () => void;
   subject: string;
@@ -34,6 +36,7 @@ export function ConfirmationDialog({
         <div className="mt-6 flex justify-end gap-3">
           <button
             className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold"
+            disabled={isSending}
             onClick={onCancel}
             type="button"
           >
@@ -41,10 +44,11 @@ export function ConfirmationDialog({
           </button>
           <button
             className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white"
+            disabled={isSending}
             onClick={onConfirm}
             type="button"
           >
-            {count}件を記録
+            {isSending ? "処理中…" : `${count}件を記録`}
           </button>
         </div>
       </div>

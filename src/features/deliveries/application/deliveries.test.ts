@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   countDeliveriesInMonth,
   createDeliveryHistoryCsv,
+  executeDelivery,
+  getRetryableRecipients,
+  retryFailedDeliveries,
 } from "./deliveries";
 import { Delivery } from "../domain/delivery";
+import { Customer } from "../../customers/domain/customer";
+import { LocalSimulationMailDeliveryService } from "../infrastructure/local-simulation-mail-delivery-service";
 
 const deliveries: Delivery[] = [
   {
@@ -34,5 +39,82 @@ describe("delivery utilities", () => {
     expect(csv.startsWith("\uFEFF")).toBe(true);
     expect(csv).toContain('"山田, 太郎"');
     expect(csv).toContain('"件名 ""確認"""');
+  });
+
+  it("宛先別結果から一部失敗を判定し、再送対象を抽出する", async () => {
+    const customers: Customer[] = [
+      {
+        id: "customer-1",
+        name: "成功",
+        email: "success@example.com",
+        orderNumber: "A-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        status: "未対応",
+      },
+      {
+        id: "customer-2",
+        name: "失敗",
+        email: "failure@example.com",
+        orderNumber: "A-2",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        status: "未対応",
+      },
+    ];
+    const service = new LocalSimulationMailDeliveryService((input) =>
+      input.to === "failure@example.com" ? "一時的な送信エラー" : undefined,
+    );
+    const { batch, deliveries: results } = await executeDelivery(
+      service,
+      customers,
+      "{{customer_name}}様へのお知らせ",
+      "注文番号 {{order_number}}",
+      new Date("2026-07-20T00:00:00.000Z"),
+    );
+
+    expect(batch.status).toBe("一部失敗");
+    expect(results.map((result) => result.status)).toEqual([
+      "送信済み",
+      "失敗",
+    ]);
+    expect(getRetryableRecipients(batch).map((recipient) => recipient.email)).toEqual([
+      "failure@example.com",
+    ]);
+  });
+
+  it("選択した失敗宛先だけを再送し、成功済み宛先を変更しない", async () => {
+    const failed: Delivery = {
+      id: "failed-1",
+      customerId: "customer-1",
+      customerName: "再送対象",
+      email: "retry@example.com",
+      subject: "再送テスト",
+      body: "本文",
+      sentAt: "2026-07-20T00:00:00.000Z",
+      status: "失敗",
+      errorMessage: "一時エラー",
+    };
+    const sent: Delivery = {
+      id: "sent-1",
+      customerName: "成功済み",
+      email: "sent@example.com",
+      subject: "再送テスト",
+      sentAt: "2026-07-20T00:00:00.000Z",
+      status: "送信済み",
+    };
+    const service = new LocalSimulationMailDeliveryService();
+    const updated = await retryFailedDeliveries(
+      service,
+      [failed, sent],
+      [failed.id],
+      new Date("2026-07-21T00:00:00.000Z"),
+    );
+
+    expect(updated[0]).toMatchObject({
+      id: "failed-1",
+      status: "送信済み",
+      retryCount: 1,
+      errorMessage: undefined,
+    });
+    expect(updated[1]).toEqual(sent);
   });
 });

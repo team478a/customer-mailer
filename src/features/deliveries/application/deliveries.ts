@@ -1,5 +1,126 @@
 import { Customer } from "../../customers/domain/customer";
-import { Delivery } from "../domain/delivery";
+import { personalize } from "../../composer/application/composer";
+import {
+  Delivery,
+  DeliveryBatch,
+  DeliveryBatchStatus,
+  DeliveryRecipient,
+} from "../domain/delivery";
+import { MailDeliveryService } from "./mail-delivery-service";
+
+function resolveBatchStatus(
+  recipients: DeliveryRecipient[],
+): DeliveryBatchStatus {
+  const sent = recipients.filter((recipient) => recipient.status === "送信済み");
+  if (sent.length === recipients.length) return "送信済み";
+  if (sent.length === 0) return "失敗";
+  return "一部失敗";
+}
+
+export async function executeDelivery(
+  service: MailDeliveryService,
+  customers: Customer[],
+  subject: string,
+  body: string,
+  now = new Date(),
+): Promise<{ batch: DeliveryBatch; deliveries: Delivery[] }> {
+  const batchId = crypto.randomUUID();
+  const recipients = await Promise.all(
+    customers.map(async (customer): Promise<DeliveryRecipient> => {
+      const result = await service.send({
+        customerId: customer.id,
+        customerName: customer.name,
+        to: customer.email,
+        subject: personalize(subject.trim(), customer),
+        body: personalize(body.trim(), customer),
+      });
+      return result.ok
+        ? {
+            id: crypto.randomUUID(),
+            customerId: customer.id,
+            customerName: customer.name,
+            email: customer.email,
+            status: "送信済み",
+            providerMessageId: result.providerMessageId,
+          }
+        : {
+            id: crypto.randomUUID(),
+            customerId: customer.id,
+            customerName: customer.name,
+            email: customer.email,
+            status: "失敗",
+            errorMessage: result.errorMessage,
+          };
+    }),
+  );
+  const completedAt = now.toISOString();
+  const batch: DeliveryBatch = {
+    id: batchId,
+    subject: subject.trim(),
+    body: body.trim(),
+    createdAt: completedAt,
+    completedAt,
+    status: resolveBatchStatus(recipients),
+    recipients,
+  };
+  const deliveries = recipients.map(
+    (recipient): Delivery => ({
+      id: recipient.id,
+      batchId,
+      customerId: recipient.customerId,
+      customerName: recipient.customerName,
+      email: recipient.email,
+      subject: subject.trim(),
+      body: body.trim(),
+      sentAt: completedAt,
+      status: recipient.status,
+      errorMessage: recipient.errorMessage,
+    }),
+  );
+  return { batch, deliveries };
+}
+
+export function getRetryableRecipients(batch: DeliveryBatch) {
+  return batch.recipients.filter((recipient) => recipient.status === "失敗");
+}
+
+export async function retryFailedDeliveries(
+  service: MailDeliveryService,
+  deliveries: Delivery[],
+  targetIds: string[],
+  now = new Date(),
+) {
+  const targets = new Set(targetIds);
+  return Promise.all(
+    deliveries.map(async (delivery): Promise<Delivery> => {
+      if (delivery.status !== "失敗" || !targets.has(delivery.id)) {
+        return delivery;
+      }
+      const result = await service.send({
+        customerId: delivery.customerId ?? delivery.id,
+        customerName: delivery.customerName,
+        to: delivery.email,
+        subject: delivery.subject,
+        body: delivery.body ?? "",
+      });
+      return result.ok
+        ? {
+            ...delivery,
+            status: "送信済み",
+            errorMessage: undefined,
+            sentAt: now.toISOString(),
+            retryCount: (delivery.retryCount ?? 0) + 1,
+            lastRetriedAt: now.toISOString(),
+          }
+        : {
+            ...delivery,
+            errorMessage: result.errorMessage,
+            retryCount: (delivery.retryCount ?? 0) + 1,
+            lastRetriedAt: now.toISOString(),
+          };
+    }),
+  );
+}
 
 export function simulateDeliveries(
   customers: Customer[],
