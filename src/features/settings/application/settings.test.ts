@@ -27,6 +27,20 @@ describe("settings", () => {
     expect(maskSecret("re_1234567890abcd")).toBe("re_1••••abcd");
   });
 
+  it("サーバー管理時はブラウザ側の接続キーを要求しない", () => {
+    const result = validateProjectSettings(
+      {
+        ...DEFAULT_PROJECT_SETTINGS,
+        mailProvider: "resend",
+        dataProvider: "supabase",
+        fromEmail: "shop@example.com",
+      },
+      EMPTY_PROJECT_SECRETS,
+      { serverManagedData: true, serverManagedSecrets: true },
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
   it("件名接頭辞・署名・フッターをメールへ適用する", () => {
     expect(
       applyMailSettings("発送しました", "本文", {

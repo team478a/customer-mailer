@@ -20,6 +20,7 @@ import { ProjectManagementPanel } from "@/features/projects/ui/project-managemen
 import { ProjectSelector } from "@/features/projects/ui/project-selector";
 import { SettingsPanel } from "@/features/settings/ui/settings-panel";
 import { SuppressionPanel } from "@/features/suppressions/ui/suppression-panel";
+import { DataSyncPanel } from "@/features/storage/ui/data-sync-panel";
 
 export function MailDashboard() {
   const dashboard = useMailDashboard();
@@ -158,6 +159,14 @@ export function MailDashboard() {
         )}
         {dashboard.activeView === "settings" && (
           <>
+            <DataSyncPanel
+              customerCount={dashboard.customers.length}
+              dataMode={dashboard.dataMode}
+              isBusy={dashboard.isDataBusy}
+              onMigrate={dashboard.migrateToSupabase}
+              saveStatus={dashboard.remoteSaveStatus}
+              serverAvailable={dashboard.serverAvailable}
+            />
             <ProjectManagementPanel
               canDelete={dashboard.projects.length > 1}
               name={dashboard.projectNameDraft}

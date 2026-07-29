@@ -1,6 +1,13 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   addCustomer,
   changeCustomerStatus,
@@ -60,6 +67,7 @@ import {
   SuppressionEntry,
   SuppressionReason,
 } from "../../suppressions/domain/suppression";
+import { ProjectSnapshot } from "../../storage/domain/project-snapshot";
 
 function safeFileName(value: string) {
   return value.replace(/[<>:"/\\|?*]/g, "-").trim() || "project";
@@ -117,6 +125,35 @@ export function useMailDashboard() {
   const [showProjectDelete, setShowProjectDelete] = useState(false);
   const [csvErrors, setCsvErrors] = useState<CsvImportError[]>([]);
   const [suppressions, setSuppressions] = useState<SuppressionEntry[]>([]);
+  const [dataMode, setDataMode] = useState<"local" | "supabase">("local");
+  const [serverAvailable, setServerAvailable] = useState(false);
+  const [remoteReady, setRemoteReady] = useState(false);
+  const [isDataBusy, setIsDataBusy] = useState(false);
+  const [remoteSaveStatus, setRemoteSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+
+  const applySnapshot = useCallback((snapshot: ProjectSnapshot) => {
+    setCurrentProjectId(snapshot.project.id);
+    setCustomers(snapshot.customers);
+    setDeliveries(snapshot.deliveries);
+    setDeliveryBatches(snapshot.deliveryBatches);
+    setCustomTemplates(snapshot.templates);
+    setSuppressions(snapshot.suppressions);
+    setSubject(snapshot.draft.subject);
+    setBody(snapshot.draft.body);
+    setSettings(snapshot.settings);
+    setSavedSettingsSignature(
+      JSON.stringify({
+        settings: snapshot.settings,
+        secrets: EMPTY_PROJECT_SECRETS,
+      }),
+    );
+    setProjectNameDraft(snapshot.project.name);
+    setSelectedIds([]);
+    setSelectedFailureIds([]);
+    setSearchQuery("");
+  }, []);
 
   useEffect(() => {
     const repos = createLocalStorageRepositories(
@@ -156,7 +193,42 @@ export function useMailDashboard() {
       availableProjects.find((project) => project.id === projectId)?.name ??
         DEFAULT_PROJECT.name,
     );
-  }, []);
+    void (async () => {
+      try {
+        const configuration = await fetch("/api/configuration/status").then(
+          (response) => response.json() as Promise<{
+            supabaseConfigured: boolean;
+          }>,
+        );
+        setServerAvailable(configuration.supabaseConfigured);
+        if (!configuration.supabaseConfigured) return;
+        const projectResponse = await fetch("/api/data/projects");
+        if (!projectResponse.ok) return;
+        const projectData = (await projectResponse.json()) as {
+          projects: Project[];
+        };
+        if (!projectData.projects.length) return;
+        const preferred =
+          projectData.projects.find((project) => project.id === storedCurrent) ??
+          projectData.projects[0];
+        const snapshotResponse = await fetch(
+          `/api/data/projects/${preferred.id}`,
+        );
+        if (!snapshotResponse.ok) return;
+        const { snapshot } = (await snapshotResponse.json()) as {
+          snapshot: ProjectSnapshot;
+        };
+        setProjects(projectData.projects);
+        setDataMode("supabase");
+        applySnapshot(snapshot);
+        setRemoteReady(true);
+      } catch {
+        setNotice(
+          "Supabaseへ接続できないため、ローカルデータを表示しています。",
+        );
+      }
+    })();
+  }, [applySnapshot]);
 
   useEffect(() => {
     repositories?.customers.saveByProject(currentProjectId, customers);
@@ -183,7 +255,6 @@ export function useMailDashboard() {
     repositories?.projects.saveAll(projects);
     repositories?.projects.setCurrentId(currentProjectId);
   }, [currentProjectId, projects, repositories]);
-
   const filteredCustomers = useMemo(
     () => searchCustomers(customers, searchQuery),
     [customers, searchQuery],
@@ -217,13 +288,82 @@ export function useMailDashboard() {
       ),
     [body, selectedCustomers, settings, subject, suppressions],
   );
+  const currentSnapshot = useMemo<ProjectSnapshot>(
+    () => ({
+      project:
+        projects.find((project) => project.id === currentProjectId) ??
+        currentProject,
+      customers,
+      templates: customTemplates,
+      draft: { subject, body },
+      deliveries,
+      deliveryBatches,
+      settings: {
+        ...settings,
+        dataProvider: dataMode === "supabase" ? "supabase" : "local",
+      },
+      suppressions,
+    }),
+    [
+      body,
+      currentProject,
+      currentProjectId,
+      customTemplates,
+      customers,
+      dataMode,
+      deliveries,
+      deliveryBatches,
+      projects,
+      settings,
+      subject,
+      suppressions,
+    ],
+  );
+  useEffect(() => {
+    if (dataMode !== "supabase" || !remoteReady) return;
+    const timer = window.setTimeout(() => {
+      setRemoteSaveStatus("saving");
+      void fetch(`/api/data/projects/${currentProjectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshot: currentSnapshot }),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error();
+          setRemoteSaveStatus("saved");
+        })
+        .catch(() => setRemoteSaveStatus("error"));
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [currentProjectId, currentSnapshot, dataMode, remoteReady]);
 
-  function switchProject(projectId: string) {
+  async function switchProject(projectId: string) {
     if (!repositories || projectId === currentProjectId) return;
     if (
       settingsDirty &&
       !window.confirm("未保存の設定があります。破棄して切り替えますか？")
     ) {
+      return;
+    }
+    if (dataMode === "supabase") {
+      setIsDataBusy(true);
+      setRemoteReady(false);
+      try {
+        const response = await fetch(`/api/data/projects/${projectId}`);
+        const result = (await response.json()) as {
+          snapshot?: ProjectSnapshot;
+          error?: string;
+        };
+        if (!response.ok || !result.snapshot) {
+          setNotice(result.error ?? "プロジェクトを取得できませんでした。");
+          return;
+        }
+        applySnapshot(result.snapshot);
+        setNotice(`「${result.snapshot.project.name}」へ切り替えました。`);
+      } finally {
+        setRemoteReady(true);
+        setIsDataBusy(false);
+      }
       return;
     }
     const draft = repositories.drafts.findByProject(projectId);
@@ -253,9 +393,52 @@ export function useMailDashboard() {
     setNotice("");
   }
 
-  function handleCreateProject(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!newProjectName.trim()) return;
+    if (dataMode === "supabase") {
+      setIsDataBusy(true);
+      try {
+        const project = createProject(newProjectName);
+        const response = await fetch("/api/data/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            snapshot: {
+              project,
+              customers: [],
+              templates: [],
+              draft: { subject: "", body: "" },
+              deliveries: [],
+              deliveryBatches: [],
+              settings: {
+                ...DEFAULT_PROJECT_SETTINGS,
+                dataProvider: "supabase",
+              },
+              suppressions: [],
+            } satisfies ProjectSnapshot,
+          }),
+        });
+        const result = (await response.json()) as {
+          snapshot?: ProjectSnapshot;
+          error?: string;
+        };
+        if (!response.ok || !result.snapshot) {
+          setNotice(result.error ?? "プロジェクトを作成できませんでした。");
+          return;
+        }
+        setRemoteReady(false);
+        setProjects((current) => [...current, result.snapshot!.project]);
+        applySnapshot(result.snapshot);
+        setNewProjectName("");
+        setShowProjectForm(false);
+        setNotice(`プロジェクト「${result.snapshot.project.name}」を作成しました。`);
+        setRemoteReady(true);
+      } finally {
+        setIsDataBusy(false);
+      }
+      return;
+    }
     const project = createProject(newProjectName);
     setProjects((current) => [...current, project]);
     setNewProjectName("");
@@ -485,7 +668,10 @@ export function useMailDashboard() {
 
   function saveSettings() {
     if (!repositories) return;
-    const validation = validateProjectSettings(settings, secrets);
+    const validation = validateProjectSettings(settings, secrets, {
+      serverManagedData: dataMode === "supabase",
+      serverManagedSecrets: serverAvailable,
+    });
     if (!validation.ok) {
       setNotice(validation.errors.join(" "));
       return;
@@ -494,7 +680,9 @@ export function useMailDashboard() {
     repositories.secretSettings.saveByProject(currentProjectId, secrets);
     setSavedSettingsSignature(JSON.stringify({ settings, secrets }));
     setNotice(
-      "設定を保存しました。秘密情報はこのブラウザセッション内だけで保持されます。",
+      dataMode === "supabase"
+        ? "設定をSupabaseへ保存します。秘密情報はサーバー環境変数で管理されます。"
+        : "設定を保存しました。秘密情報はこのブラウザセッション内だけで保持されます。",
     );
   }
 
@@ -538,8 +726,32 @@ export function useMailDashboard() {
     setNotice(`プロジェクト名を「${name}」へ変更しました。`);
   }
 
-  function deleteCurrentProject() {
+  async function deleteCurrentProject() {
     if (!repositories || projects.length <= 1) return;
+    if (dataMode === "supabase") {
+      setIsDataBusy(true);
+      try {
+        const response = await fetch(
+          `/api/data/projects/${currentProjectId}`,
+          { method: "DELETE" },
+        );
+        const result = (await response.json()) as { error?: string };
+        if (!response.ok) {
+          setNotice(result.error ?? "プロジェクトを削除できませんでした。");
+          return;
+        }
+        const remaining = projects.filter(
+          (project) => project.id !== currentProjectId,
+        );
+        setProjects(remaining);
+        setShowProjectDelete(false);
+        await switchProject(remaining[0].id);
+        setNotice("Supabaseからプロジェクトを削除しました。");
+      } finally {
+        setIsDataBusy(false);
+      }
+      return;
+    }
     repositories.projectData.clearProject(currentProjectId);
     const remaining = projects.filter(
       (project) => project.id !== currentProjectId,
@@ -683,6 +895,46 @@ export function useMailDashboard() {
     setNotice("選択した購入者を削除しました。");
   }
 
+  async function migrateToSupabase() {
+    if (!serverAvailable || dataMode === "supabase" || isDataBusy) return;
+    if (
+      !window.confirm(
+        `「${currentProject.name}」の顧客${customers.length}件と関連データをSupabaseへ移行しますか？`,
+      )
+    ) return;
+    exportProjectBackup();
+    setIsDataBusy(true);
+    try {
+      const response = await fetch("/api/data/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshot: currentSnapshot }),
+      });
+      const result = (await response.json()) as {
+        snapshot?: ProjectSnapshot;
+        error?: string;
+      };
+      if (!response.ok || !result.snapshot) {
+        setNotice(result.error ?? "Supabaseへの移行に失敗しました。");
+        return;
+      }
+      const projectResponse = await fetch("/api/data/projects");
+      const projectData = (await projectResponse.json()) as {
+        projects: Project[];
+      };
+      setRemoteReady(false);
+      setProjects(projectData.projects);
+      setDataMode("supabase");
+      applySnapshot(result.snapshot);
+      setRemoteReady(true);
+      setNotice(
+        "移行前バックアップをダウンロードし、Supabaseへの移行が完了しました。",
+      );
+    } finally {
+      setIsDataBusy(false);
+    }
+  }
+
   return {
     activeView,
     body,
@@ -697,6 +949,7 @@ export function useMailDashboard() {
     filteredCustomers,
     isSending,
     isRetrying,
+    isDataBusy,
     monthlyDeliveryCount: countDeliveriesInMonth(deliveries),
     newProjectName,
     notice,
@@ -715,6 +968,9 @@ export function useMailDashboard() {
     subject,
     settings,
     settingsDirty,
+    dataMode,
+    serverAvailable,
+    remoteSaveStatus,
     suppressions,
     preflight,
     templateName,
@@ -738,6 +994,7 @@ export function useMailDashboard() {
     exportProjectBackup,
     importCsv: handleCsvImport,
     importProjectBackup,
+    migrateToSupabase,
     removeSuppression: (id: string) =>
       setSuppressions((current) => current.filter((entry) => entry.id !== id)),
     removeCustomer: (id: string) => {

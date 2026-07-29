@@ -27,6 +27,9 @@
 - 配信バッチ単位の本文・宛先別結果確認
 - 復元前の自動バックアップ
 - Supabase Authによるサーバー認証（設定時）
+- LocalStorageからSupabaseへのプロジェクト単位移行
+- Supabase移行後の自動保存・複数端末共有
+- Supabase上のプロジェクト作成・切替・削除
 - Resendによる宛先別実送信（設定時・テストモード解除時）
 - 送信要求とResend APIの冪等性キーによる二重送信防止
 - 署名検証・重複排除付きResend Webhook
@@ -127,7 +130,7 @@ https://your-domain.example/api/webhooks/resend
 - Webhook署名検証と`svix-id`重複排除
 - バウンス・苦情アドレスの自動送信除外
 
-既存のLocalStorageデータは自動的にはSupabaseへ移行されません。実送信するプロジェクトと顧客は、Supabase側にも同じUUIDで登録されている必要があります。
+既存データは管理画面の「設定 → データ保存・移行 → Supabaseへ移行」からプロジェクト単位で移行できます。移行前にはJSONバックアップが自動ダウンロードされ、元のLocalStorageデータも切り戻し用に残ります。移行後は変更がSupabaseへ自動保存され、同じユーザーでログインした別端末から参照できます。
 
 ## 検証
 
@@ -147,4 +150,4 @@ GitHub ActionsではPull Requestと`master`へのpush時に、依存関係のク
 
 ## 今後の接続ポイント
 
-次の主な工程は、LocalStorageからSupabaseへのデータ移行UI、Supabase Repositoryへの完全切り替え、非同期ジョブキューです。LeadHIVE・CRM連携、ステップメール、開封・クリック分析はMVP以降の対象です。
+次の主な工程はResendの送信ドメイン・Webhook設定と非同期ジョブキューです。LeadHIVE・CRM連携、ステップメール、開封・クリック分析はMVP以降の対象です。

@@ -11,6 +11,10 @@ export type SettingsValidationResult =
 export function validateProjectSettings(
   settings: ProjectSettings,
   secrets: ProjectSecrets,
+  options: {
+    serverManagedSecrets?: boolean;
+    serverManagedData?: boolean;
+  } = {},
 ): SettingsValidationResult {
   const errors: string[] = [];
   if (settings.fromEmail && !isValidEmail(settings.fromEmail)) {
@@ -29,11 +33,14 @@ export function validateProjectSettings(
     if (!settings.fromEmail) {
       errors.push("Resend利用時は送信元メールアドレスが必要です。");
     }
-    if (!secrets.resendApiKey.startsWith("re_")) {
+    if (
+      !options.serverManagedSecrets &&
+      !secrets.resendApiKey.startsWith("re_")
+    ) {
       errors.push("Resend APIキーはre_で始まる値を設定してください。");
     }
   }
-  if (settings.dataProvider === "supabase") {
+  if (settings.dataProvider === "supabase" && !options.serverManagedData) {
     try {
       const url = new URL(settings.supabaseUrl);
       if (url.protocol !== "https:") throw new Error();
