@@ -5,13 +5,17 @@ import {
   saveProjectSnapshot,
 } from "@/features/storage/infrastructure/supabase-project-snapshot-store";
 import { ProjectSnapshot } from "@/features/storage/domain/project-snapshot";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function GET() {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "認証が必要です。" }, { status: 401 });
   try {
-    return NextResponse.json({ projects: await listRemoteProjects(supabase) });
+    const admin = createSupabaseAdminClient();
+    return NextResponse.json({
+      projects: await listRemoteProjects(admin, user.id),
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "プロジェクトを取得できませんでした。" },
@@ -28,7 +32,8 @@ export async function POST(request: Request) {
   if (!input?.snapshot?.project?.name?.trim()) {
     return NextResponse.json({ error: "プロジェクトデータが不正です。" }, { status: 400 });
   }
-  const { data: project, error } = await supabase
+  const admin = createSupabaseAdminClient();
+  const { data: project, error } = await admin
     .from("projects")
     .insert({ name: input.snapshot.project.name.trim(), created_by: user.id })
     .select("id,name,created_at")
@@ -46,10 +51,10 @@ export async function POST(request: Request) {
     settings: { ...input.snapshot.settings, dataProvider: "supabase" },
   };
   try {
-    await saveProjectSnapshot(supabase, snapshot, user.id);
+    await saveProjectSnapshot(admin, snapshot, user.id);
     return NextResponse.json({ snapshot }, { status: 201 });
   } catch (saveError) {
-    await supabase.from("projects").delete().eq("id", project.id);
+    await admin.from("projects").delete().eq("id", project.id);
     return NextResponse.json(
       { error: saveError instanceof Error ? saveError.message : "データを移行できませんでした。" },
       { status: 500 },

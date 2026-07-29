@@ -35,10 +35,12 @@ function assertNoError(error: { message: string } | null) {
 
 export async function listRemoteProjects(
   supabase: SupabaseClient,
+  userId: string,
 ): Promise<RemoteProjectSummary[]> {
   const { data, error } = await supabase
     .from("project_members")
     .select("role,projects(id,name,created_at)")
+    .eq("user_id", userId)
     .order("created_at", { referencedTable: "projects", ascending: true });
   assertNoError(error);
   return (data ?? []).flatMap((row) => {

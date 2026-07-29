@@ -5,6 +5,8 @@ import {
   saveProjectSnapshot,
 } from "@/features/storage/infrastructure/supabase-project-snapshot-store";
 import { ProjectSnapshot } from "@/features/storage/domain/project-snapshot";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { assertProjectAccess } from "@/lib/supabase/project-access";
 
 type Context = { params: Promise<{ projectId: string }> };
 
@@ -14,7 +16,9 @@ export async function GET(_: Request, { params }: Context) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "認証が必要です。" }, { status: 401 });
   try {
-    return NextResponse.json({ snapshot: await loadProjectSnapshot(supabase, projectId) });
+    const admin = createSupabaseAdminClient();
+    await assertProjectAccess(admin, projectId, user.id);
+    return NextResponse.json({ snapshot: await loadProjectSnapshot(admin, projectId) });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "データを取得できませんでした。" },
@@ -33,7 +37,9 @@ export async function PUT(request: Request, { params }: Context) {
     return NextResponse.json({ error: "プロジェクトIDが一致しません。" }, { status: 400 });
   }
   try {
-    await saveProjectSnapshot(supabase, input.snapshot, user.id);
+    const admin = createSupabaseAdminClient();
+    await assertProjectAccess(admin, projectId, user.id);
+    await saveProjectSnapshot(admin, input.snapshot, user.id);
     return NextResponse.json({ saved: true });
   } catch (error) {
     return NextResponse.json(
@@ -48,7 +54,16 @@ export async function DELETE(_: Request, { params }: Context) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "認証が必要です。" }, { status: 401 });
-  const { error } = await supabase.from("projects").delete().eq("id", projectId);
+  const admin = createSupabaseAdminClient();
+  try {
+    await assertProjectAccess(admin, projectId, user.id, true);
+  } catch (accessError) {
+    return NextResponse.json(
+      { error: accessError instanceof Error ? accessError.message : "権限がありません。" },
+      { status: 403 },
+    );
+  }
+  const { error } = await admin.from("projects").delete().eq("id", projectId);
   if (error) return NextResponse.json({ error: error.message }, { status: 403 });
   return NextResponse.json({ deleted: true });
 }
