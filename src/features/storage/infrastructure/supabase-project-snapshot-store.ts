@@ -29,6 +29,30 @@ const batchStatusFromDb = {
   failed: "失敗",
 } as const;
 
+const recipientStatusFromDb = {
+  queued: "送信待ち",
+  sending: "送信中",
+  sent: "送信済み",
+  delivered: "配達済み",
+  delayed: "遅延",
+  suppressed: "配信停止",
+  bounced: "バウンス",
+  complained: "迷惑メール報告",
+  failed: "失敗",
+} as const;
+
+const recipientStatusToDb = {
+  送信待ち: "queued",
+  送信中: "sending",
+  送信済み: "sent",
+  配達済み: "delivered",
+  遅延: "delayed",
+  配信停止: "suppressed",
+  バウンス: "bounced",
+  迷惑メール報告: "complained",
+  失敗: "failed",
+} as const;
+
 function assertNoError(error: { message: string } | null) {
   if (error) throw new Error(error.message);
 }
@@ -100,6 +124,9 @@ export async function loadProjectSnapshot(
     status:
       batchStatusFromDb[batch.status as keyof typeof batchStatusFromDb] ??
       "送信待ち",
+    fromName: batch.from_name ? String(batch.from_name) : undefined,
+    fromEmail: batch.from_email ? String(batch.from_email) : undefined,
+    replyTo: batch.reply_to ? String(batch.reply_to) : undefined,
     recipients: recipients
       .filter((recipient) => recipient.delivery_id === batch.id)
       .map((recipient) => ({
@@ -107,13 +134,17 @@ export async function loadProjectSnapshot(
         customerId: recipient.customer_id ? String(recipient.customer_id) : "",
         customerName: String(recipient.customer_name),
         email: String(recipient.email),
-        status: recipient.status === "sent" ? "送信済み" as const : "失敗" as const,
+        status: recipientStatusFromDb[
+          recipient.status as keyof typeof recipientStatusFromDb
+        ] ?? "失敗",
         providerMessageId: recipient.provider_message_id
           ? String(recipient.provider_message_id)
           : undefined,
         errorMessage: recipient.error_message
           ? String(recipient.error_message)
           : undefined,
+        deliveredAt: recipient.delivered_at ? String(recipient.delivered_at) : undefined,
+        lastEventAt: recipient.last_event_at ? String(recipient.last_event_at) : undefined,
       })),
   }));
   const settingsRow = settingsResult.data;
@@ -170,9 +201,13 @@ export async function loadProjectSnapshot(
       subject: String(recipient.personalized_subject),
       body: String(recipient.personalized_body),
       sentAt: String(recipient.sent_at ?? recipient.last_attempt_at ?? new Date(0).toISOString()),
-      status: recipient.status === "sent" ? "送信済み" as const : "失敗" as const,
+      status: recipientStatusFromDb[
+        recipient.status as keyof typeof recipientStatusFromDb
+      ] ?? "失敗",
       errorMessage: recipient.error_message ? String(recipient.error_message) : undefined,
       retryCount: Math.max(0, Number(recipient.attempt_count ?? 1) - 1),
+      deliveredAt: recipient.delivered_at ? String(recipient.delivered_at) : undefined,
+      lastEventAt: recipient.last_event_at ? String(recipient.last_event_at) : undefined,
     })),
     suppressions: (suppressionResult.data ?? []).map((entry) => ({
       id: String(entry.id),
@@ -267,6 +302,9 @@ export async function saveProjectSnapshot(
         created_by: userId,
         created_at: batch.createdAt,
         completed_at: batch.completedAt ?? null,
+        from_name: batch.fromName ?? null,
+        from_email: batch.fromEmail ?? null,
+        reply_to: batch.replyTo ?? null,
       })),
     )).error);
     const recipients = snapshot.deliveryBatches.flatMap((batch) =>
@@ -280,14 +318,16 @@ export async function saveProjectSnapshot(
           email: recipient.email,
           personalized_subject: detail?.subject ?? batch.subject,
           personalized_body: detail?.body ?? batch.body,
-          status: recipient.status === "送信済み" ? "sent" : "failed",
+          status: recipientStatusToDb[recipient.status],
           provider_message_id: recipient.providerMessageId ?? null,
           error_message: recipient.errorMessage ?? null,
           attempt_count: (detail?.retryCount ?? 0) + 1,
           last_attempt_at: detail?.lastRetriedAt ?? detail?.sentAt ?? batch.completedAt ?? batch.createdAt,
-          sent_at: recipient.status === "送信済み"
+          sent_at: recipient.status === "送信済み" || recipient.status === "配達済み"
             ? detail?.sentAt ?? batch.completedAt ?? batch.createdAt
             : null,
+          delivered_at: detail?.deliveredAt ?? recipient.deliveredAt ?? null,
+          last_event_at: detail?.lastEventAt ?? recipient.lastEventAt ?? null,
         };
       }),
     );

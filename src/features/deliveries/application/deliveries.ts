@@ -11,7 +11,9 @@ import { MailDeliveryService } from "./mail-delivery-service";
 function resolveBatchStatus(
   recipients: DeliveryRecipient[],
 ): DeliveryBatchStatus {
-  const sent = recipients.filter((recipient) => recipient.status === "送信済み");
+  const sent = recipients.filter((recipient) =>
+    recipient.status === "送信済み" || recipient.status === "配達済み",
+  );
   if (sent.length === recipients.length) return "送信済み";
   if (sent.length === 0) return "失敗";
   return "一部失敗";

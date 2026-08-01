@@ -75,6 +75,9 @@ export async function POST(request: Request) {
       status: "sending",
       created_by: user.id,
       idempotency_key: input.requestId,
+      from_name: input.fromName,
+      from_email: input.fromEmail,
+      reply_to: input.replyTo || null,
       started_at: new Date().toISOString(),
     })
     .select("id")

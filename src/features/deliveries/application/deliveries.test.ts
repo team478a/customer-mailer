@@ -154,4 +154,35 @@ describe("delivery utilities", () => {
     expect(updatedBatch.status).toBe("送信済み");
     expect(updatedBatch.recipients[0].status).toBe("送信済み");
   });
+
+  it("配達済みを成功として配信バッチへ反映する", () => {
+    const batch = {
+      id: "batch-delivered",
+      subject: "件名",
+      body: "本文",
+      createdAt: "2026-07-20T00:00:00.000Z",
+      status: "送信済み" as const,
+      recipients: [{
+        id: "recipient-delivered",
+        customerId: "customer-1",
+        customerName: "顧客",
+        email: "delivered@example.com",
+        status: "送信済み" as const,
+      }],
+    };
+    const delivered: Delivery = {
+      id: "recipient-delivered",
+      batchId: "batch-delivered",
+      customerName: "顧客",
+      email: "delivered@example.com",
+      subject: "件名",
+      sentAt: "2026-07-20T00:00:00.000Z",
+      deliveredAt: "2026-07-20T00:01:00.000Z",
+      status: "配達済み",
+    };
+
+    const [updated] = reconcileDeliveryBatches([batch], [delivered]);
+    expect(updated.status).toBe("送信済み");
+    expect(updated.recipients[0].status).toBe("配達済み");
+  });
 });

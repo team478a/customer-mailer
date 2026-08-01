@@ -1,4 +1,13 @@
-export type RecipientDeliveryStatus = "送信済み" | "失敗";
+export type RecipientDeliveryStatus =
+  | "送信待ち"
+  | "送信中"
+  | "送信済み"
+  | "配達済み"
+  | "遅延"
+  | "配信停止"
+  | "バウンス"
+  | "迷惑メール報告"
+  | "失敗";
 export type DeliveryBatchStatus =
   | "送信待ち"
   | "送信中"
@@ -19,6 +28,8 @@ export type Delivery = {
   errorMessage?: string;
   retryCount?: number;
   lastRetriedAt?: string;
+  deliveredAt?: string;
+  lastEventAt?: string;
 };
 
 export type DeliveryRecipient = {
@@ -29,6 +40,8 @@ export type DeliveryRecipient = {
   status: RecipientDeliveryStatus;
   providerMessageId?: string;
   errorMessage?: string;
+  deliveredAt?: string;
+  lastEventAt?: string;
 };
 
 export type DeliveryBatch = {
@@ -38,5 +51,8 @@ export type DeliveryBatch = {
   createdAt: string;
   completedAt?: string;
   status: DeliveryBatchStatus;
+  fromName?: string;
+  fromEmail?: string;
+  replyTo?: string;
   recipients: DeliveryRecipient[];
 };

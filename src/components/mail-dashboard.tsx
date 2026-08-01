@@ -150,7 +150,9 @@ export function MailDashboard() {
             batches={dashboard.deliveryBatches}
             deliveries={dashboard.deliveries}
             isRetrying={dashboard.isRetrying}
+            isRefreshing={dashboard.isHistoryRefreshing}
             onExport={dashboard.exportHistory}
+            onRefresh={dashboard.refreshDeliveryHistory}
             onRetry={() => dashboard.setShowRetryConfirmation(true)}
             onToggleAllFailures={dashboard.toggleAllFailures}
             onToggleFailure={dashboard.toggleFailure}

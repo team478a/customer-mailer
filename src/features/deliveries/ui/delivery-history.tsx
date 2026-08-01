@@ -1,10 +1,27 @@
 import { Delivery, DeliveryBatch } from "../domain/delivery";
 
+const failureStatuses = new Set([
+  "失敗",
+  "配信停止",
+  "バウンス",
+  "迷惑メール報告",
+]);
+
+function statusClass(status: Delivery["status"]) {
+  if (status === "配達済み") return "bg-emerald-50 text-emerald-700";
+  if (status === "送信済み") return "bg-blue-50 text-blue-700";
+  if (status === "遅延") return "bg-amber-50 text-amber-700";
+  if (failureStatuses.has(status)) return "bg-red-50 text-red-700";
+  return "bg-slate-100 text-slate-600";
+}
+
 export function DeliveryHistory({
   batches,
   deliveries,
   isRetrying,
+  isRefreshing,
   onExport,
+  onRefresh,
   onRetry,
   onToggleAllFailures,
   onToggleFailure,
@@ -13,7 +30,9 @@ export function DeliveryHistory({
   batches: DeliveryBatch[];
   deliveries: Delivery[];
   isRetrying: boolean;
+  isRefreshing: boolean;
   onExport: () => void;
+  onRefresh: () => void;
   onRetry: () => void;
   onToggleAllFailures: () => void;
   onToggleFailure: (id: string) => void;
@@ -39,6 +58,14 @@ export function DeliveryHistory({
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
+          <button
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold disabled:opacity-40"
+            disabled={isRefreshing}
+            onClick={onRefresh}
+            type="button"
+          >
+            {isRefreshing ? "更新中…" : "最新状態に更新"}
+          </button>
           {failedDeliveries.length > 0 && (
             <button
               className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
@@ -85,9 +112,12 @@ export function DeliveryHistory({
                     {batch.recipients.map((recipient) => (
                       <li className="flex justify-between gap-4" key={recipient.id}>
                         <span>{recipient.customerName} &lt;{recipient.email}&gt;</span>
-                        <span className={recipient.status === "失敗" ? "text-red-600" : "text-emerald-700"}>
+                        <span className={failureStatuses.has(recipient.status) ? "text-red-600" : "text-emerald-700"}>
                           {recipient.status}
                           {recipient.errorMessage ? `: ${recipient.errorMessage}` : ""}
+                          {recipient.deliveredAt
+                            ? `（${new Intl.DateTimeFormat("ja-JP", { dateStyle: "short", timeStyle: "short" }).format(new Date(recipient.deliveredAt))}）`
+                            : ""}
                         </span>
                       </li>
                     ))}
@@ -148,11 +178,7 @@ export function DeliveryHistory({
                   </td>
                   <td className="px-6 py-4">
                     <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                        delivery.status === "送信済み"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-red-50 text-red-700"
-                      }`}
+                      className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(delivery.status)}`}
                       title={delivery.errorMessage}
                     >
                       {delivery.status}
@@ -160,6 +186,14 @@ export function DeliveryHistory({
                     {delivery.errorMessage && (
                       <p className="mt-2 max-w-xs text-xs text-red-600">
                         {delivery.errorMessage}
+                      </p>
+                    )}
+                    {delivery.deliveredAt && (
+                      <p className="mt-1 text-xs text-slate-400">
+                        配達 {new Intl.DateTimeFormat("ja-JP", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        }).format(new Date(delivery.deliveredAt))}
                       </p>
                     )}
                     {!!delivery.retryCount && (

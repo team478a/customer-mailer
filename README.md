@@ -62,11 +62,11 @@ src/features/
 
 画面はRepositoryインターフェースを通じてデータへアクセスします。現在はLocalStorage実装を利用しており、将来はUIを変更せずSupabase実装へ差し替えられる構成です。
 
-メール送信も `MailDeliveryService` で抽象化しています。現在はローカルシミュレーション実装を使用し、宛先別の成功・失敗と再送対象を扱える設計です。次工程のSupabaseスキーマ案は `supabase/migrations/0001_initial_schema.sql`、接続方針は `docs/next-data-layer.md` を参照してください。これらはまだ外部サービスへ適用されません。
+メール送信も `MailDeliveryService` で抽象化しています。ローカルシミュレーションに加え、サーバーAPI経由のResend送信に対応しています。Supabaseスキーマは `supabase/migrations/`、接続方針は `docs/next-data-layer.md` を参照してください。
 
 配信履歴では失敗した宛先だけを選択し、再送シミュレーションできます。送信済みの宛先は再送対象にならないため、成功分の二重送信を防げます。
 
-配信操作はバッチとしてプロジェクト別に保存され、件名・本文・全体ステータス・宛先別結果を保持します。再送前には対象メールアドレスと前回エラーを確認するダイアログが表示されます。
+配信操作はバッチとしてプロジェクト別に保存され、件名・本文・送信元・全体ステータス・宛先別結果を保持します。Resend Webhook受信後は、送信済み・配達済み・遅延・バウンス・迷惑メール報告・配信停止を宛先別に記録します。再送前には対象メールアドレスと前回エラーを確認するダイアログが表示されます。
 
 ## 管理画面の設定
 
@@ -110,6 +110,7 @@ Supabaseへ以下の順序でマイグレーションを適用します。
 ```text
 supabase/migrations/0001_initial_schema.sql
 supabase/migrations/0002_server_operations.sql
+supabase/migrations/0003_delivery_tracking.sql
 ```
 
 Resend Webhookの送信先は次のURLです。

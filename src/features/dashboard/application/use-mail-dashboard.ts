@@ -105,6 +105,7 @@ export function useMailDashboard() {
   >("send");
   const [isSending, setIsSending] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isHistoryRefreshing, setIsHistoryRefreshing] = useState(false);
   const [selectedFailureIds, setSelectedFailureIds] = useState<string[]>([]);
   const [showRetryConfirmation, setShowRetryConfirmation] = useState(false);
   const [settings, setSettings] = useState<ProjectSettings>(
@@ -594,6 +595,7 @@ export function useMailDashboard() {
           setNotice(result.error ?? "サーバー送信に失敗しました。");
           return;
         }
+        await refreshDeliveryHistory();
         setSelectedIds([]);
         setShowConfirmation(false);
         setNotice(
@@ -630,6 +632,28 @@ export function useMailDashboard() {
       );
     } finally {
       setIsSending(false);
+    }
+  }
+
+  async function refreshDeliveryHistory() {
+    if (dataMode !== "supabase" || isHistoryRefreshing) return;
+    setIsHistoryRefreshing(true);
+    try {
+      const response = await fetch(`/api/data/projects/${currentProjectId}`, {
+        cache: "no-store",
+      });
+      const result = (await response.json()) as {
+        snapshot?: ProjectSnapshot;
+        error?: string;
+      };
+      if (!response.ok || !result.snapshot) {
+        setNotice(result.error ?? "配信履歴を更新できませんでした。");
+        return;
+      }
+      setDeliveries(result.snapshot.deliveries);
+      setDeliveryBatches(result.snapshot.deliveryBatches);
+    } finally {
+      setIsHistoryRefreshing(false);
     }
   }
 
@@ -719,6 +743,7 @@ export function useMailDashboard() {
       }
     }
     setActiveView(view);
+    if (view === "history") void refreshDeliveryHistory();
   }
 
   function renameProject() {
@@ -955,6 +980,7 @@ export function useMailDashboard() {
     filteredCustomers,
     isSending,
     isRetrying,
+    isHistoryRefreshing,
     isDataBusy,
     monthlyDeliveryCount: countDeliveriesInMonth(deliveries),
     newProjectName,
@@ -1011,6 +1037,7 @@ export function useMailDashboard() {
       setNotice("購入者を削除しました。");
     },
     retryFailed: handleRetryFailed,
+    refreshDeliveryHistory,
     renameProject,
     saveCustomer: handleUpdateCustomer,
     saveTemplate: handleSaveTemplate,

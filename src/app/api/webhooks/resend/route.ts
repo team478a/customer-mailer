@@ -14,6 +14,35 @@ type ResendWebhookEvent = {
   };
 };
 
+const recipientStatusByEvent = {
+  "email.sent": "sent",
+  "email.delivered": "delivered",
+  "email.delivery_delayed": "delayed",
+  "email.failed": "failed",
+  "email.bounced": "bounced",
+  "email.complained": "complained",
+  "email.suppressed": "suppressed",
+} as const;
+
+async function refreshDeliveryStatus(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  deliveryId: string,
+) {
+  const { data } = await admin
+    .from("delivery_recipients")
+    .select("status")
+    .eq("delivery_id", deliveryId);
+  if (!data?.length) return;
+  const failedStatuses = new Set(["failed", "bounced", "complained", "suppressed"]);
+  const failed = data.filter((row) => failedStatuses.has(String(row.status))).length;
+  const status = failed === data.length
+    ? "failed"
+    : failed > 0
+      ? "partially_failed"
+      : "sent";
+  await admin.from("deliveries").update({ status }).eq("id", deliveryId);
+}
+
 export async function POST(request: Request) {
   const environment = getServerEnvironment();
   if (!environment.resendApiKey || !environment.resendWebhookSecret) {
@@ -55,39 +84,56 @@ export async function POST(request: Request) {
 
   const messageId = event.data?.email_id;
   if (messageId) {
-    const failure =
-      event.type === "email.bounced" || event.type === "email.complained";
-    if (failure) {
+    const nextStatus = recipientStatusByEvent[
+      event.type as keyof typeof recipientStatusByEvent
+    ];
+    if (nextStatus) {
       const { data: recipient } = await admin
         .from("delivery_recipients")
-        .select("id,email,delivery_id")
+        .select("id,email,delivery_id,status")
         .eq("provider_message_id", messageId)
         .maybeSingle();
       if (recipient) {
+        const occurredAt = event.created_at ?? new Date().toISOString();
+        const isFailure = ["failed", "bounced", "complained", "suppressed"].includes(nextStatus);
+        const shouldUpdateStatus = !(
+          recipient.status === "delivered" &&
+          (nextStatus === "sent" || nextStatus === "delayed")
+        );
         await admin
           .from("delivery_recipients")
           .update({
-            status: "failed",
-            error_message:
-              event.type === "email.bounced"
+            ...(shouldUpdateStatus ? { status: nextStatus } : {}),
+            last_event_at: occurredAt,
+            ...(nextStatus === "delivered" ? { delivered_at: occurredAt, error_message: null } : {}),
+            ...(isFailure ? {
+              error_message: event.type === "email.bounced"
                 ? "Resend: バウンス"
-                : "Resend: 迷惑メール報告",
+                : event.type === "email.complained"
+                  ? "Resend: 迷惑メール報告"
+                  : event.type === "email.suppressed"
+                    ? "Resend: 配信停止"
+                    : "Resend: 配信失敗",
+            } : {}),
           })
           .eq("id", recipient.id);
-        const { data: delivery } = await admin
+        await refreshDeliveryStatus(admin, recipient.delivery_id);
+        const suppress = ["email.bounced", "email.complained", "email.suppressed"].includes(event.type ?? "");
+        const { data: delivery } = suppress ? await admin
           .from("deliveries")
           .select("project_id")
           .eq("id", recipient.delivery_id)
-          .single();
+          .single() : { data: null };
         if (delivery) {
           await admin.from("suppression_list").upsert(
             {
               project_id: delivery.project_id,
               email: recipient.email,
-              reason:
-                event.type === "email.bounced"
-                  ? "バウンス"
-                  : "迷惑メール報告",
+              reason: event.type === "email.bounced"
+                ? "バウンス"
+                : event.type === "email.complained"
+                  ? "迷惑メール報告"
+                  : "配信停止希望",
             },
             { onConflict: "project_id,normalized_email" },
           );
